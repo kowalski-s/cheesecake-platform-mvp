@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes, Navigate } from 'react-router-dom'
+import { NavLink, Route, Routes, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 
 import Login from './pages/Auth/Login'
@@ -18,7 +18,7 @@ function App() {
   return (
     <div className="min-h-screen bg-surface">
       <Topbar />
-      <main className="container py-6">
+      <main className="max-w-6xl mx-auto px-4 py-6">
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" />} />
           <Route path="/login" element={<Login />} />
@@ -34,6 +34,15 @@ function App() {
                 ) : (
                   <DashboardStudent />
                 )}
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/teacher"
+            element={
+              <ProtectedRoute>
+                <DashboardTeacher />
               </ProtectedRoute>
             }
           />
@@ -74,10 +83,11 @@ function App() {
 }
 
 function Topbar() {
-  const { profile } = useAuth()
+  const navigate = useNavigate()
+  const { profile, signOut } = useAuth()
   return (
-    <header className="sticky top-0 z-10 bg-white shadow-soft">
-      <div className="container flex h-14 items-center justify-between">
+    <header className="sticky top-0 z-10 bg-white shadow-sm">
+      <div className="max-w-6xl mx-auto px-4 flex h-14 items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-xl bg-brand" />
           <span className="font-semibold">Cheesecake School</span>
@@ -89,6 +99,12 @@ function Topbar() {
           {profile?.role === 'admin' && (
             <NavLink className="text-sm text-gray-600 hover:text-gray-900" to="/admin">Админ</NavLink>
           )}
+          {profile && (
+            <button
+              className="inline-flex items-center rounded-xl px-3 py-1.5 text-sm font-medium bg-brand text-white hover:bg-brand-muted"
+              onClick={async () => { await signOut(); navigate('/login') }}
+            >Выйти</button>
+          )}
         </nav>
       </div>
     </header>
@@ -98,7 +114,7 @@ function Topbar() {
 function Footer() {
   return (
     <footer className="border-t border-gray-100 py-6">
-      <div className="container text-sm text-gray-500">
+      <div className="max-w-6xl mx-auto px-4 text-sm text-gray-500">
         © {new Date().getFullYear()} Cheesecake School — MVP
       </div>
     </footer>

@@ -75,7 +75,14 @@ export default function SchedulePage() {
               <span className="rounded-xl bg-gray-50 px-3 py-1 text-sm text-gray-700">{l.status}</span>
             </li>
           ))}
-          {lessons.length === 0 && <li className="py-3 text-sm text-gray-500">Нет занятий по выбранным фильтрам</li>}
+          {lessons.length === 0 && (
+            <li className="py-8">
+              <div className="text-center">
+                <div className="mb-2 text-sm text-gray-500">У вас пока нет занятий</div>
+                <a href="/teachers" className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium bg-brand text-white hover:bg-brand-muted">Посмотреть всех преподавателей</a>
+              </div>
+            </li>
+          )}
         </ul>
       </section>
     </div>

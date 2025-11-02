@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 
 const AuthContext = createContext(null)
 
@@ -10,6 +10,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const init = async () => {
+      if (!isSupabaseConfigured || !supabase) {
+        setLoading(false)
+        return
+      }
       const { data: { session } } = await supabase.auth.getSession()
       setSession(session)
       if (session?.user) {
@@ -19,17 +23,19 @@ export function AuthProvider({ children }) {
     }
     init()
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session)
-      if (session?.user) {
-        await loadProfile(session.user.id)
-      } else {
-        setProfile(null)
-      }
-    })
+    if (isSupabaseConfigured && supabase) {
+      const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        setSession(session)
+        if (session?.user) {
+          await loadProfile(session.user.id)
+        } else {
+          setProfile(null)
+        }
+      })
 
-    return () => {
-      authListener.subscription?.unsubscribe()
+      return () => {
+        authListener.subscription?.unsubscribe()
+      }
     }
   }, [])
 
@@ -42,7 +48,15 @@ export function AuthProvider({ children }) {
     if (!error) setProfile(data)
   }
 
-  const value = useMemo(() => ({ session, profile, loading }), [session, profile, loading])
+  const signOut = async () => {
+    if (isSupabaseConfigured && supabase) {
+      await supabase.auth.signOut()
+    }
+    setSession(null)
+    setProfile(null)
+  }
+
+  const value = useMemo(() => ({ session, profile, loading, isSupabaseConfigured, signOut }), [session, profile, loading])
 
   return (
     <AuthContext.Provider value={value}>

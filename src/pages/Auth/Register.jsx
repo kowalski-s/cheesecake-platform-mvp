@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient'
 
 export default function Register() {
   const navigate = useNavigate()
@@ -14,6 +14,11 @@ export default function Register() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false)
+      setError('Нет подключения к базе, проверьте переменные окружения')
+      return
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -36,8 +41,13 @@ export default function Register() {
   }
 
   return (
-    <div className="container max-w-md py-12">
-      <div className="card">
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-[420px]">
+        <div className="mb-4 flex items-center justify-center gap-2">
+          <div className="h-8 w-8 rounded-xl bg-brand" />
+          <div className="text-lg font-semibold">Cheesecake School</div>
+        </div>
+        <div className="rounded-xl border border-slate-100 bg-white shadow-sm p-6">
         <h1 className="mb-6 text-2xl font-semibold">Регистрация</h1>
         <form className="space-y-4" onSubmit={onSubmit}>
           <div>
@@ -60,6 +70,12 @@ export default function Register() {
         <div className="mt-4 text-center text-sm text-gray-600">
           Уже есть аккаунт?{' '}
           <Link to="/login" className="hover:text-gray-900">Войти</Link>
+        </div>
+        {!isSupabaseConfigured && (
+          <div className="mt-4 rounded-xl bg-yellow-50 p-3 text-sm text-yellow-800">
+            Нет подключения к базе, проверьте переменные окружения.
+          </div>
+        )}
         </div>
       </div>
     </div>

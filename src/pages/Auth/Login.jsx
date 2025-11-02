@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -13,18 +13,42 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false)
+      setError('Нет подключения к базе, проверьте переменные окружения')
+      return
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
     if (error) {
       setError(error.message)
     } else {
-      navigate('/dashboard')
+      // After login, route by role
+      const userId = (await supabase.auth.getUser()).data.user?.id
+      if (userId) {
+        const { data } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', userId)
+          .maybeSingle()
+        const role = data?.role
+        if (role === 'admin') navigate('/admin')
+        else if (role === 'teacher') navigate('/teacher')
+        else navigate('/dashboard')
+      } else {
+        navigate('/dashboard')
+      }
     }
   }
 
   return (
-    <div className="container max-w-md py-12">
-      <div className="card">
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-[420px]">
+        <div className="mb-4 flex items-center justify-center gap-2">
+          <div className="h-8 w-8 rounded-xl bg-brand" />
+          <div className="text-lg font-semibold">Cheesecake School</div>
+        </div>
+        <div className="rounded-xl border border-slate-100 bg-white shadow-sm p-6">
         <h1 className="mb-6 text-2xl font-semibold">Вход</h1>
         <form className="space-y-4" onSubmit={onSubmit}>
           <div>
@@ -43,6 +67,12 @@ export default function Login() {
         <div className="mt-4 flex justify-between text-sm text-gray-600">
           <Link to="/register" className="hover:text-gray-900">Регистрация</Link>
           <Link to="/forgot" className="hover:text-gray-900">Забыли пароль?</Link>
+        </div>
+        {!isSupabaseConfigured && (
+          <div className="mt-4 rounded-xl bg-yellow-50 p-3 text-sm text-yellow-800">
+            Нет подключения к базе, проверьте переменные окружения.
+          </div>
+        )}
         </div>
       </div>
     </div>
