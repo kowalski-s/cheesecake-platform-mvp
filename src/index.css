@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+/* Tailwind v4: design tokens via @theme */
+@theme {
+  --color-brand: #f78c1f;
+  --color-brand-soft: #f7a64f;
+  --color-brand-muted: #e87c14;
+  --color-surface: #ffffff;
+  --color-surface-light: #f7f7f7;
+  --color-surface-dark: #f0f0f0;
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+  --shadow-soft: 0 4px 14px rgba(0,0,0,0.08);
+  --radius-xl: 16px;
+}
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  body { @apply bg-surface text-text antialiased; }
+}
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 font-medium transition-all duration-300 ease-out shadow-soft; }
+  .btn-primary { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 font-medium transition-all duration-300 ease-out shadow-soft bg-brand text-white hover:bg-brand-muted focus:ring-2 focus:ring-brand/30; }
+  .btn-outline { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 font-medium transition-all duration-300 ease-out shadow-soft border border-brand text-brand hover:bg-brand/10; }
+  .card { @apply rounded-xl bg-white shadow-soft p-4; }
+  .input { @apply w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20; }
+}
