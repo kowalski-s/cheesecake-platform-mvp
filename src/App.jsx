@@ -30,7 +30,7 @@ function App() {
             element={
               <ProtectedRoute>
                 {profile?.role === 'teacher' ? (
-                  <DashboardTeacher />
+                  <Navigate to="/teacher" replace />
                 ) : (
                   <DashboardStudent />
                 )}
@@ -42,7 +42,9 @@ function App() {
             path="/teacher"
             element={
               <ProtectedRoute>
-                <DashboardTeacher />
+                <RoleGuard allow={["teacher", "admin"]}>
+                  <DashboardTeacher />
+                </RoleGuard>
               </ProtectedRoute>
             }
           />

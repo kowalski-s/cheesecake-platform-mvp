@@ -40,12 +40,40 @@ export function AuthProvider({ children }) {
   }, [])
 
   const loadProfile = async (userId) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, role, display_name, student_id, teacher_id')
-      .eq('id', userId)
-      .single()
-    if (!error) setProfile(data)
+    try {
+      // Пытаемся получить профиль из базы
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, role, display_name, student_id, teacher_id')
+        .eq('id', userId)
+        .single()
+      
+      if (!error && data) {
+        // Профиль найден в базе
+        setProfile(data)
+      } else {
+        // Профиль НЕ найден - создаем временный профиль
+        // Это решает проблему бесконечной загрузки, когда строки в public.users нет
+        const user = (await supabase.auth.getUser()).data.user
+        setProfile({
+          id: userId,
+          role: 'student', // По умолчанию роль student
+          display_name: user?.email?.split('@')[0] || 'Пользователь',
+          student_id: null,
+          teacher_id: null
+        })
+      }
+    } catch (err) {
+      console.error('Ошибка загрузки профиля:', err)
+      // Даже при ошибке создаем временный профиль
+      setProfile({
+        id: userId,
+        role: 'student',
+        display_name: 'Пользователь',
+        student_id: null,
+        teacher_id: null
+      })
+    }
   }
 
   const signOut = async () => {

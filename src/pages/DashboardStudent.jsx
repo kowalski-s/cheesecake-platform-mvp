@@ -31,7 +31,41 @@ export default function DashboardStudent() {
     load()
   }, [])
 
-  if (loading) return <div className="py-10 text-center">Загрузка…</div>
+  if (loading) {
+    return (
+      <div className="card p-8 text-center">
+        <div className="animate-pulse mb-4 mx-auto h-12 w-12 rounded-full bg-gray-200"></div>
+        <p className="text-gray-600">Загрузка данных...</p>
+      </div>
+    )
+  }
+
+  // Если нет данных, показываем красивую заглушку вместо пустой страницы
+  const hasNoData = !subscription && upcoming.length === 0 && past.length === 0 && progress.length === 0
+
+  if (hasNoData) {
+    return (
+      <div className="space-y-6">
+        <div className="card p-8 text-center">
+          <div className="mb-6 mx-auto h-16 w-16 rounded-full bg-brand/10 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Добро пожаловать в Cheesecake School!</h2>
+          <p className="text-gray-600 mb-6">Похоже, у вас пока нет активных занятий или абонемента.</p>
+          <div className="flex justify-center gap-4">
+            <a href="/schedule" className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium bg-brand text-white hover:bg-brand-muted">
+              Посмотреть расписание
+            </a>
+            <a href="/materials" className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50">
+              Учебные материалы
+            </a>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const remaining = subscription?.remaining_lessons ?? 0
 
