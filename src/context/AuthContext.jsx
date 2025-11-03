@@ -1,96 +1,160 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
-const AuthContext = createContext(null)
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(null)
-  const [profile, setProfile] = useState(null) // { id, role, display_name, student_id?, teacher_id? }
-  const [loading, setLoading] = useState(true)
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null); // { id, role, display_name, student_id?, teacher_id? }
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const init = async () => {
+    let unsub = null;
+
+    const boot = async () => {
+      // 1) Если Supabase не настроен — сразу выходим из «загрузки»
       if (!isSupabaseConfigured || !supabase) {
-        setLoading(false)
-        return
+        console.log('Supabase не сконфигурирован');
+        setSession(null);
+        setProfile(null);
+        setLoading(false);
+        return;
       }
-      const { data: { session } } = await supabase.auth.getSession()
-      setSession(session)
-      if (session?.user) {
-        await loadProfile(session.user.id)
-      }
-      setLoading(false)
-    }
-    init()
 
-    if (isSupabaseConfigured && supabase) {
-      const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        setSession(session)
-        if (session?.user) {
-          await loadProfile(session.user.id)
+      try {
+        setLoading(true);
+
+        // 2) Получаем текущую сессию
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('Ошибка получения сессии:', error);
+          setSession(null);
+          setProfile(null);
         } else {
-          setProfile(null)
-        }
-      })
+          const sess = data?.session ?? null;
+          setSession(sess);
 
-      return () => {
-        authListener.subscription?.unsubscribe()
+          // 3) Если есть пользователь — грузим профиль (с временной подстраховкой)
+          if (sess?.user) {
+            try {
+              await loadProfile(sess.user.id);
+            } catch (profileError) {
+              console.error('Ошибка загрузки профиля:', profileError);
+              setProfile({
+                id: sess.user.id,
+                role: 'student',
+                display_name:
+                  sess.user.email?.split('@')[0] || 'Пользователь',
+                student_id: null,
+                teacher_id: null,
+              });
+            }
+          } else {
+            setProfile(null);
+          }
+        }
+
+        // 4) Подписка на изменения авторизации
+        const sub = supabase.auth.onAuthStateChange(async (_event, sess) => {
+          setSession(sess ?? null);
+
+          if (sess?.user) {
+            try {
+              await loadProfile(sess.user.id);
+            } catch (error) {
+              console.error('Ошибка загрузки профиля при смене состояния:', error);
+              setProfile({
+                id: sess.user.id,
+                role: 'student',
+                display_name:
+                  sess.user.email?.split('@')[0] || 'Пользователь',
+                student_id: null,
+                teacher_id: null,
+              });
+            }
+          } else {
+            setProfile(null);
+          }
+        });
+
+        unsub = () => sub?.data?.subscription?.unsubscribe?.();
+      } catch (e) {
+        console.error('Критическая ошибка инициализации:', e);
+        setSession(null);
+        setProfile(null);
+      } finally {
+        // 5) Всегда завершаем загрузку
+        setLoading(false);
       }
-    }
-  }, [])
+    };
+
+    boot();
+
+    return () => {
+      try {
+        unsub && unsub();
+      } catch {}
+    };
+    // Важно: если конфиг появится/исчезнет — переинициализируем
+  }, [isSupabaseConfigured]);
 
   const loadProfile = async (userId) => {
-    try {
-      // Пытаемся получить профиль из базы
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, role, display_name, student_id, teacher_id')
-        .eq('id', userId)
-        .single()
-      
-      if (!error && data) {
-        // Профиль найден в базе
-        setProfile(data)
-      } else {
-        // Профиль НЕ найден - создаем временный профиль
-        // Это решает проблему бесконечной загрузки, когда строки в public.users нет
-        const user = (await supabase.auth.getUser()).data.user
-        setProfile({
-          id: userId,
-          role: 'student', // По умолчанию роль student
-          display_name: user?.email?.split('@')[0] || 'Пользователь',
-          student_id: null,
-          teacher_id: null
-        })
-      }
-    } catch (err) {
-      console.error('Ошибка загрузки профиля:', err)
-      // Даже при ошибке создаем временный профиль
-      setProfile({
-        id: userId,
-        role: 'student',
-        display_name: 'Пользователь',
-        student_id: null,
-        teacher_id: null
-      })
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase не сконфигурирован');
     }
-  }
+
+    // Пытаемся получить профиль из public.users
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, role, display_name, student_id, teacher_id')
+      .eq('id', userId)
+      .single();
+
+    if (!error && data) {
+      setProfile(data);
+      return;
+    }
+
+    // Нет записи — создаём временный профиль + пробуем вставить
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) {
+      throw new Error('Не удалось получить данные пользователя');
+    }
+
+    const tempProfile = {
+      id: userId,
+      role: 'student',
+      display_name: userData.user?.email?.split('@')[0] || 'Пользователь',
+      student_id: null,
+      teacher_id: null,
+    };
+
+    setProfile(tempProfile);
+
+    try {
+      await supabase.from('users').insert([tempProfile]);
+    } catch (insertError) {
+      console.error('Не удалось создать профиль в базе:', insertError);
+    }
+  };
 
   const signOut = async () => {
-    if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signOut()
+    try {
+      if (isSupabaseConfigured && supabase) {
+        await supabase.auth.signOut();
+      }
+    } finally {
+      setSession(null);
+      setProfile(null);
     }
-    setSession(null)
-    setProfile(null)
-  }
+  };
 
-  const value = useMemo(() => ({ session, profile, loading, isSupabaseConfigured, signOut }), [session, profile, loading])
+  const value = useMemo(
+    () => ({ session, profile, loading, isSupabaseConfigured, signOut }),
+    [session, profile, loading]
+  );
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export const useAuth = () => useContext(AuthContext)
+export const useAuth = () => useContext(AuthContext);

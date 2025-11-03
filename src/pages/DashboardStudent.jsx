@@ -15,47 +15,65 @@ export default function DashboardStudent() {
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      const user = (await supabase.auth.getUser()).data.user
-      if (!user) return
-
+      
       try {
-        // Получаем данные ученика, включая teacher_id
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('id, teacher_id, remaining_lessons')
-          .eq('id', user.id)
-          .maybeSingle()
-        
-        // Если у ученика есть преподаватель, получаем его данные
-        let teacherData = null
-        if (studentData?.teacher_id) {
-          const { data: teacher } = await supabase
-            .from('teachers')
-            .select('id, display_name, bio')
-            .eq('id', studentData.teacher_id)
-            .maybeSingle()
-          teacherData = teacher
+        // Проверяем, настроен ли Supabase
+        if (!supabase) {
+          console.error('Supabase client is not configured')
+          return
         }
         
-        // Получаем остальные данные
-        const [{ data: subs }, { data: lessons }, { data: prog }] = await Promise.all([
-          supabase.from('subscriptions').select('*').eq('user_id', user.id).eq('active', true).maybeSingle(),
-          supabase.from('lessons').select('id, title, start_at, status, teacher:teachers(display_name)').eq('student_id', user.id).order('start_at', { ascending: true }),
-          supabase.from('progress').select('*').eq('student_id', user.id).order('updated_at', { ascending: false }),
-        ])
-
-        setSubscription(subs || null)
-        setTeacher(teacherData)
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError) throw userError
+        if (!user) return
         
-        const now = Date.now()
-        setUpcoming((lessons || []).filter(l => new Date(l.start_at).getTime() >= now))
-        setPast((lessons || []).filter(l => new Date(l.start_at).getTime() < now))
-        setProgress(prog || [])
+        try {
+          // Получаем данные ученика, включая teacher_id
+          const { data: studentData } = await supabase
+            .from('students')
+            .select('id, teacher_id, remaining_lessons')
+            .eq('id', user.id)
+            .maybeSingle()
+          
+          // Если у ученика есть преподаватель, получаем его данные
+          let teacherData = null
+          if (studentData?.teacher_id) {
+            const { data: teacher } = await supabase
+              .from('teachers')
+              .select('id, display_name, bio')
+              .eq('id', studentData.teacher_id)
+              .maybeSingle()
+            teacherData = teacher
+          }
+          
+          // Получаем остальные данные
+          const [{ data: subs }, { data: lessons }, { data: prog }] = await Promise.all([
+            supabase.from('subscriptions').select('*').eq('user_id', user.id).eq('active', true).maybeSingle(),
+            supabase.from('lessons').select('id, title, start_at, status, teacher:teachers(display_name)').eq('student_id', user.id).order('start_at', { ascending: true }),
+            supabase.from('progress').select('*').eq('student_id', user.id).order('updated_at', { ascending: false }),
+          ])
+
+          setSubscription(subs || null)
+          setTeacher(teacherData)
+          
+          const now = Date.now()
+          setUpcoming((lessons || []).filter(l => new Date(l.start_at).getTime() >= now))
+          setPast((lessons || []).filter(l => new Date(l.start_at).getTime() < now))
+          setProgress(prog || [])
+        } catch (error) {
+          console.error('Error loading student data:', error)
+          // Устанавливаем пустые данные, чтобы показать заглушки
+          setSubscription(null)
+          setTeacher(null)
+          setUpcoming([])
+          setPast([])
+          setProgress([])
+        }
       } catch (error) {
-        console.error('Error loading student data:', error)
+        console.error('Error in auth:', error)
+      } finally {
+        setLoading(false)
       }
-      
-      setLoading(false)
     }
     load()
   }, [])
