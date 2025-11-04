@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   NavLink,
   Route,
@@ -22,49 +22,64 @@ import TeachersPage from "./pages/Teachers";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleGuard from "./components/RoleGuard";
 import Loading from "./components/ui/Loading";
+import AppLayout from "./layouts/AppLayout";
 
 function App() {
   const { profile, loading } = useAuth();
   const location = useLocation();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isAuthPage = ["/login", "/register", "/forgot"].includes(
     location.pathname
   );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {!isAuthPage && <Topbar />}
+      {!isAuthPage && (
+        <Topbar onToggleSidebar={() => setMobileSidebarOpen((v) => !v)} />
+      )}
 
-      <main className={isAuthPage ? "" : "max-w-6xl mx-auto px-4 py-6"}>
+      <main className="">
         {loading ? (
           <div className="flex justify-center items-center h-screen">
             <Loading />
           </div>
         ) : (
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/forgot" element={<ForgotPassword />} />
-
             <Route
-              path="/dashboard"
+              path="/"
               element={
                 <ProtectedRoute>
                   {profile?.role === "teacher" ? (
                     <Navigate to="/teacher" replace />
                   ) : (
-                    <DashboardStudent />
+                    <AppLayout
+                      mobileSidebarOpen={mobileSidebarOpen}
+                      onCloseSidebar={() => setMobileSidebarOpen(false)}
+                    >
+                      <DashboardStudent />
+                    </AppLayout>
                   )}
                 </ProtectedRoute>
               }
             />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forgot" element={<ForgotPassword />} />
+
+            {/* Legacy redirect: keep compatibility but avoid duplicating content */}
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
 
             <Route
               path="/teacher"
               element={
                 <ProtectedRoute>
                   <RoleGuard allow={["teacher", "admin"]}>
-                    <DashboardTeacher />
+                    <AppLayout
+                      mobileSidebarOpen={mobileSidebarOpen}
+                      onCloseSidebar={() => setMobileSidebarOpen(false)}
+                    >
+                      <DashboardTeacher />
+                    </AppLayout>
                   </RoleGuard>
                 </ProtectedRoute>
               }
@@ -74,7 +89,12 @@ function App() {
               path="/schedule"
               element={
                 <ProtectedRoute>
-                  <SchedulePage />
+                  <AppLayout
+                    mobileSidebarOpen={mobileSidebarOpen}
+                    onCloseSidebar={() => setMobileSidebarOpen(false)}
+                  >
+                    <SchedulePage />
+                  </AppLayout>
                 </ProtectedRoute>
               }
             />
@@ -83,7 +103,12 @@ function App() {
               path="/materials"
               element={
                 <ProtectedRoute>
-                  <MaterialsPage />
+                  <AppLayout
+                    mobileSidebarOpen={mobileSidebarOpen}
+                    onCloseSidebar={() => setMobileSidebarOpen(false)}
+                  >
+                    <MaterialsPage />
+                  </AppLayout>
                 </ProtectedRoute>
               }
             />
@@ -93,7 +118,12 @@ function App() {
               element={
                 <ProtectedRoute>
                   <RoleGuard allow={["admin"]}>
-                    <AdminPage />
+                    <AppLayout
+                      mobileSidebarOpen={mobileSidebarOpen}
+                      onCloseSidebar={() => setMobileSidebarOpen(false)}
+                    >
+                      <AdminPage />
+                    </AppLayout>
                   </RoleGuard>
                 </ProtectedRoute>
               }
@@ -103,7 +133,12 @@ function App() {
               path="/teachers"
               element={
                 <ProtectedRoute>
-                  <TeachersPage />
+                  <AppLayout
+                    mobileSidebarOpen={mobileSidebarOpen}
+                    onCloseSidebar={() => setMobileSidebarOpen(false)}
+                  >
+                    <TeachersPage />
+                  </AppLayout>
                 </ProtectedRoute>
               }
             />
@@ -113,7 +148,12 @@ function App() {
               element={
                 <ProtectedRoute>
                   <RoleGuard allow={["student"]}>
-                    <StudentsPage />
+                    <AppLayout
+                      mobileSidebarOpen={mobileSidebarOpen}
+                      onCloseSidebar={() => setMobileSidebarOpen(false)}
+                    >
+                      <StudentsPage />
+                    </AppLayout>
                   </RoleGuard>
                 </ProtectedRoute>
               }
@@ -127,172 +167,116 @@ function App() {
   );
 }
 
-function Topbar() {
-  const { profile, signOut } = useAuth();
+function Topbar({ onToggleSidebar }) {
+  const { profile, session, signOut } = useAuth();
   const navigate = useNavigate();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Закрытие дропдауна по Escape и клику вне
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    const onClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onClickOutside);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onClickOutside);
+    };
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/login");
-    setMobileMenuOpen(false);
+    navigate("/");
+    setMenuOpen(false);
   };
 
+  const role = profile?.role;
+  const displayName = profile?.display_name || "";
+  const email = session?.user?.email || "";
+  const initials = (() => {
+    const name = displayName.trim();
+    if (name) {
+      const parts = name.split(/\s+/);
+      const first = parts[0]?.[0] || "";
+      const second = parts.length > 1 ? parts[1]?.[0] || "" : "";
+      const res = `${first}${second}`.toUpperCase();
+      if (res) return res;
+    }
+    const letter = email.split("@")[0]?.[0] || "?";
+    return String(letter).toUpperCase();
+  })();
+
   return (
-    <header className="sticky top-0 z-10 bg-white shadow-sm">
-      <div className="max-w-6xl mx-auto px-4 flex h-16 items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-brand flex items-center justify-center text-white font-bold">
-            🟠
-          </div>
+    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200/60 dark:bg-slate-900/70 dark:border-slate-800/60">
+      <div className="container mx-auto flex items-center justify-between py-3 px-4">
+        {/* Left: logo + brand */}
+        <div className="flex items-center gap-2">
+          <div className="h-10 w-10 rounded-xl bg-brand flex items-center justify-center text-white font-bold">🟠</div>
           <span className="font-semibold">Cheesecake School</span>
         </div>
 
-        {/* Desktop navigation */}
-        <nav className="hidden md:flex items-center gap-4">
-          <NavLink
-            className={({ isActive }) =>
-              `text-sm ${
-                isActive
-                  ? "text-brand font-medium"
-                  : "text-gray-600 hover:text-gray-900"
-              }`
-            }
-            to="/dashboard"
-          >
-            Главная
-          </NavLink>
-          <NavLink
-            className={({ isActive }) =>
-              `text-sm ${
-                isActive
-                  ? "text-brand font-medium"
-                  : "text-gray-600 hover:text-gray-900"
-              }`
-            }
-            to="/schedule"
-          >
-            Расписание
-          </NavLink>
-          <NavLink
-            className={({ isActive }) =>
-              `text-sm ${
-                isActive
-                  ? "text-brand font-medium"
-                  : "text-gray-600 hover:text-gray-900"
-              }`
-            }
-            to="/materials"
-          >
-            Материалы
-          </NavLink>
-          {profile?.role === "admin" && (
-            <NavLink
-              className={({ isActive }) =>
-                `text-sm ${
-                  isActive
-                    ? "text-brand font-medium"
-                    : "text-gray-600 hover:text-gray-900"
-                }`
-              }
-              to="/admin"
-            >
-              Админ
-            </NavLink>
-          )}
-          {profile && (
-            <button
-              className="ml-2 inline-flex items-center rounded-xl px-3 py-1.5 text-sm font-medium bg-brand text-white hover:bg-brand-muted transition-colors"
-              onClick={handleSignOut}
-            >
-              Выйти
-            </button>
-          )}
-        </nav>
+        {/* Center: navigation removed; sidebar handles navigation */}
 
-        {/* Mobile menu button */}
-        <button
-          className="md:hidden rounded-md p-2 text-gray-600 hover:bg-gray-100"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            className="h-6 w-6"
+        {/* Right: avatar dropdown + mobile toggle */}
+        <div className="flex items-center gap-3">
+          {/* Mobile menu button */}
+          <button
+            className="md:hidden rounded-md p-2 text-gray-600 hover:bg-gray-100"
+            onClick={onToggleSidebar}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 6h16M4 12h16M4 18h16"
-            />
-          </svg>
-        </button>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="h-6 w-6">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+
+          {profile && (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                className="hidden md:flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-700 font-semibold"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen(!menuOpen)}
+              >
+                {initials}
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-56 rounded-xl border bg-white shadow-lg p-1 z-50">
+                  {role === "student" && (
+                    <NavLink
+                      className={({ isActive }) => `block rounded-lg px-3 py-2 ${isActive ? "bg-brand/10 text-brand font-semibold" : "text-gray-700 hover:bg-gray-50"}`}
+                      to="/student"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Профиль
+                    </NavLink>
+                  )}
+                  {role === "admin" && (
+                    <NavLink
+                      className={({ isActive }) => `block rounded-lg px-3 py-2 ${isActive ? "bg-brand/10 text-brand font-semibold" : "text-gray-700 hover:bg-gray-50"}`}
+                      to="/admin"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Админ
+                    </NavLink>
+                  )}
+                  <div className="my-1 h-px bg-gray-200" />
+                  <button className="block w-full text-left rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50">Настройки</button>
+                  <button className="block w-full text-left rounded-lg px-3 py-2 text-red-600 hover:bg-red-50" onClick={handleSignOut}>Выйти</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Mobile menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-t border-gray-100 shadow-sm">
-          <div className="max-w-6xl mx-auto px-4 py-2 space-y-1">
-            <NavLink
-              className={({ isActive }) =>
-                `block py-2 px-3 rounded-lg ${
-                  isActive ? "bg-brand/10 text-brand font-medium" : "text-gray-600 hover:bg-gray-50"
-                }`
-              }
-              to="/dashboard"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Главная
-            </NavLink>
-            <NavLink
-              className={({ isActive }) =>
-                `block py-2 px-3 rounded-lg ${
-                  isActive ? "bg-brand/10 text-brand font-medium" : "text-gray-600 hover:bg-gray-50"
-                }`
-              }
-              to="/schedule"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Расписание
-            </NavLink>
-            <NavLink
-              className={({ isActive }) =>
-                `block py-2 px-3 rounded-lg ${
-                  isActive ? "bg-brand/10 text-brand font-medium" : "text-gray-600 hover:bg-gray-50"
-                }`
-              }
-              to="/materials"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Материалы
-            </NavLink>
-            {profile?.role === "admin" && (
-              <NavLink
-                className={({ isActive }) =>
-                  `block py-2 px-3 rounded-lg ${
-                    isActive ? "bg-brand/10 text-brand font-medium" : "text-gray-600 hover:bg-gray-50"
-                  }`
-                }
-                to="/admin"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Админ
-              </NavLink>
-            )}
-            {profile && (
-              <button
-                className="w-full text-left block py-2 px-3 rounded-lg text-red-600 hover:bg-red-50"
-                onClick={handleSignOut}
-              >
-                Выйти
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Mobile menu removed; off-canvas sidebar is handled by AppLayout */}
     </header>
   );
 }
