@@ -13,6 +13,7 @@ import Login from "./pages/Auth/Login";
 import Register from "./pages/Auth/Register";
 import ForgotPassword from "./pages/Auth/ForgotPassword";
 import DashboardStudent from "./pages/DashboardStudent";
+import StudentsPage from "./pages/Students";
 import DashboardTeacher from "./pages/DashboardTeacher";
 import SchedulePage from "./pages/Schedule";
 import MaterialsPage from "./pages/Materials";
@@ -103,6 +104,17 @@ function App() {
               element={
                 <ProtectedRoute>
                   <TeachersPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/student"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard allow={["student"]}>
+                    <StudentsPage />
+                  </RoleGuard>
                 </ProtectedRoute>
               }
             />
