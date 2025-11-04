@@ -6,6 +6,7 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
   const { profile } = useAuth();
   const role = profile?.role;
   const firstLinkRef = useRef(null);
+  const closeButtonRef = useRef(null);
   const overlayRef = useRef(null);
   const panelRef = useRef(null);
 
@@ -15,7 +16,7 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
 
     const focusTimer = setTimeout(() => {
       try {
-        firstLinkRef.current?.focus();
+        (closeButtonRef.current || firstLinkRef.current)?.focus();
       } catch {}
     }, 0);
 
@@ -68,7 +69,7 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
             className={({ isActive }) =>
               `rounded-lg px-3 py-2 transition ${isActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`
             }
-            aria-current={({ isActive }) => (isActive ? "page" : undefined)}
+            tabIndex={0}
             ref={firstLinkRef}
           >
             Главная
@@ -87,7 +88,7 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
             className={({ isActive }) =>
               `rounded-lg px-3 py-2 transition ${isActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`
             }
-            aria-current={({ isActive }) => (isActive ? "page" : undefined)}
+            tabIndex={0}
           >
             Материалы
           </NavLink>
@@ -126,15 +127,30 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
           ref={overlayRef}
         >
           <div className="absolute inset-0 bg-black/40" onClick={onCloseSidebar} />
-          <div className="absolute left-0 top-0 bottom-0 shadow-lg">
-            <div
-              className="h-full"
-              onClick={(e) => e.stopPropagation()}
-              ref={panelRef}
+      <div className="absolute left-0 top-0 bottom-0 shadow-lg">
+        <div
+          className="h-full"
+          onClick={(e) => e.stopPropagation()}
+          ref={panelRef}
+        >
+          {/* Off-canvas header with close button (mobile only) */}
+          <div className="md:hidden flex items-center justify-end p-3 border-b border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900">
+            <button
+              type="button"
+              aria-label="Закрыть сайдбар"
+              className="rounded-md p-2 text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand"
+              onClick={onCloseSidebar}
+              tabIndex={0}
+              ref={closeButtonRef}
             >
-              {SidebarContent}
-            </div>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
+          {SidebarContent}
+        </div>
+      </div>
         </div>
       )}
 

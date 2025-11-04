@@ -8,17 +8,20 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null); // { id, role, display_name, student_id?, teacher_id? }
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
     let unsub = null;
 
     const boot = async () => {
+      setInitializing(true);
       // 1) Если Supabase не настроен — сразу выходим из «загрузки»
       if (!isSupabaseConfigured || !supabase) {
         console.log('Supabase не сконфигурирован');
         setSession(null);
         setProfile(null);
         setLoading(false);
+        setInitializing(false);
         return;
       }
 
@@ -38,14 +41,31 @@ export function AuthProvider({ children }) {
           // 3) Если есть пользователь — грузим профиль (с временной подстраховкой)
           if (sess?.user) {
             try {
-              await loadProfile(sess.user.id);
+              const { data: row, error: roleError } = await supabase
+                .from('users')
+                .select('id, role, display_name, student_id, teacher_id')
+                .eq('id', sess.user.id)
+                .maybeSingle();
+
+              if (roleError) {
+                console.error('Ошибка получения роли:', roleError);
+              }
+
+              setProfile(
+                row ?? {
+                  id: sess.user.id,
+                  role: null,
+                  display_name: sess.user.email?.split('@')[0] || 'Пользователь',
+                  student_id: null,
+                  teacher_id: null,
+                }
+              );
             } catch (profileError) {
               console.error('Ошибка загрузки профиля:', profileError);
               setProfile({
                 id: sess.user.id,
-                role: 'student',
-                display_name:
-                  sess.user.email?.split('@')[0] || 'Пользователь',
+                role: null,
+                display_name: sess.user.email?.split('@')[0] || 'Пользователь',
                 student_id: null,
                 teacher_id: null,
               });
@@ -61,14 +81,31 @@ export function AuthProvider({ children }) {
 
           if (sess?.user) {
             try {
-              await loadProfile(sess.user.id);
+              const { data: row, error: roleError } = await supabase
+                .from('users')
+                .select('id, role, display_name, student_id, teacher_id')
+                .eq('id', sess.user.id)
+                .maybeSingle();
+
+              if (roleError) {
+                console.error('Ошибка получения роли при смене состояния:', roleError);
+              }
+
+              setProfile(
+                row ?? {
+                  id: sess.user.id,
+                  role: null,
+                  display_name: sess.user.email?.split('@')[0] || 'Пользователь',
+                  student_id: null,
+                  teacher_id: null,
+                }
+              );
             } catch (error) {
               console.error('Ошибка загрузки профиля при смене состояния:', error);
               setProfile({
                 id: sess.user.id,
-                role: 'student',
-                display_name:
-                  sess.user.email?.split('@')[0] || 'Пользователь',
+                role: null,
+                display_name: sess.user.email?.split('@')[0] || 'Пользователь',
                 student_id: null,
                 teacher_id: null,
               });
@@ -86,6 +123,7 @@ export function AuthProvider({ children }) {
       } finally {
         // 5) Всегда завершаем загрузку
         setLoading(false);
+        setInitializing(false);
       }
     };
 
@@ -151,8 +189,8 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ session, profile, loading, isSupabaseConfigured, signOut }),
-    [session, profile, loading]
+    () => ({ session, profile, loading, initializing, isSupabaseConfigured, signOut }),
+    [session, profile, loading, initializing]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

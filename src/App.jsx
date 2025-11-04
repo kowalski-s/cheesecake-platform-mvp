@@ -12,6 +12,7 @@ import { useAuth } from "./context/AuthContext";
 import Login from "./pages/Auth/Login";
 import Register from "./pages/Auth/Register";
 import ForgotPassword from "./pages/Auth/ForgotPassword";
+import HomePage from "./pages/Home";
 import DashboardStudent from "./pages/DashboardStudent";
 import StudentsPage from "./pages/Students";
 import DashboardTeacher from "./pages/DashboardTeacher";
@@ -25,7 +26,7 @@ import Loading from "./components/ui/Loading";
 import AppLayout from "./layouts/AppLayout";
 
 function App() {
-  const { profile, loading } = useAuth();
+  const { profile, initializing } = useAuth();
   const location = useLocation();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isAuthPage = ["/login", "/register", "/forgot"].includes(
@@ -38,127 +39,83 @@ function App() {
         <Topbar onToggleSidebar={() => setMobileSidebarOpen((v) => !v)} />
       )}
 
-      <main className="">
-        {loading ? (
-          <div className="flex justify-center items-center h-screen">
-            <Loading />
-          </div>
-        ) : (
+      <main>
+        {isAuthPage ? (
           <Routes>
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  {profile?.role === "teacher" ? (
-                    <Navigate to="/teacher" replace />
-                  ) : (
-                    <AppLayout
-                      mobileSidebarOpen={mobileSidebarOpen}
-                      onCloseSidebar={() => setMobileSidebarOpen(false)}
-                    >
-                      <DashboardStudent />
-                    </AppLayout>
-                  )}
-                </ProtectedRoute>
-              }
-            />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot" element={<ForgotPassword />} />
-
-            {/* Legacy redirect: keep compatibility but avoid duplicating content */}
-            <Route path="/dashboard" element={<Navigate to="/" replace />} />
-
-            <Route
-              path="/teacher"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard allow={["teacher", "admin"]}>
-                    <AppLayout
-                      mobileSidebarOpen={mobileSidebarOpen}
-                      onCloseSidebar={() => setMobileSidebarOpen(false)}
-                    >
-                      <DashboardTeacher />
-                    </AppLayout>
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/schedule"
-              element={
-                <ProtectedRoute>
-                  <AppLayout
-                    mobileSidebarOpen={mobileSidebarOpen}
-                    onCloseSidebar={() => setMobileSidebarOpen(false)}
-                  >
-                    <SchedulePage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/materials"
-              element={
-                <ProtectedRoute>
-                  <AppLayout
-                    mobileSidebarOpen={mobileSidebarOpen}
-                    onCloseSidebar={() => setMobileSidebarOpen(false)}
-                  >
-                    <MaterialsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard allow={["admin"]}>
-                    <AppLayout
-                      mobileSidebarOpen={mobileSidebarOpen}
-                      onCloseSidebar={() => setMobileSidebarOpen(false)}
-                    >
-                      <AdminPage />
-                    </AppLayout>
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/teachers"
-              element={
-                <ProtectedRoute>
-                  <AppLayout
-                    mobileSidebarOpen={mobileSidebarOpen}
-                    onCloseSidebar={() => setMobileSidebarOpen(false)}
-                  >
-                    <TeachersPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/student"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard allow={["student"]}>
-                    <AppLayout
-                      mobileSidebarOpen={mobileSidebarOpen}
-                      onCloseSidebar={() => setMobileSidebarOpen(false)}
-                    >
-                      <StudentsPage />
-                    </AppLayout>
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
           </Routes>
+        ) : (
+          <AppLayout
+            mobileSidebarOpen={mobileSidebarOpen}
+            onCloseSidebar={() => setMobileSidebarOpen(false)}
+          >
+            {initializing ? (
+              <div className="flex justify-center items-center py-20">
+                <Loading />
+              </div>
+            ) : (
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route
+                  path="/teacher"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["teacher", "admin"]}>
+                        <DashboardTeacher />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/schedule"
+                  element={
+                    <ProtectedRoute>
+                      <SchedulePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/materials"
+                  element={
+                    <ProtectedRoute>
+                      <MaterialsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["admin"]}>
+                        <AdminPage />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/teachers"
+                  element={
+                    <ProtectedRoute>
+                      <TeachersPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/student"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["student"]}>
+                        <StudentsPage />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            )}
+          </AppLayout>
         )}
       </main>
 
