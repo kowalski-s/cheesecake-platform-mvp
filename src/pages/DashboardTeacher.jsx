@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { format } from 'date-fns'
 
 export default function DashboardTeacher() {
+  // TODO: список учеников, расписание, отметка проведённого урока (patch в lessons.status), проверка ДЗ
   const [schedule, setSchedule] = useState([])
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)

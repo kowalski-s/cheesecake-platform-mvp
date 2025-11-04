@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import Loading from '../components/ui/Loading'
 
 export default function MaterialsPage() {
+  // TODO: доступ только при назначенном teacher_id; список файлов из supabase.storage('materials'); загрузка/просмотр
   const [files, setFiles] = useState([])
   const [file, setFile] = useState(null)
   const [canAccess, setCanAccess] = useState(false)

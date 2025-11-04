@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
 const AuthContext = createContext(null);
 
+// TODO: мемоизировать профиль + кэшировать роль в sessionStorage
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null); // { id, role, display_name, student_id?, teacher_id? }

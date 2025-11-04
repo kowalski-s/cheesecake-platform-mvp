@@ -7,6 +7,7 @@ import PageHeader from "../components/ui/PageHeader";
 import Section from "../components/ui/Section";
 import Loading from "../components/ui/Loading";
 
+// TODO: вкладки Ученики/Преподаватели/Материалы, модалки добавления, фильтр "заканчивается абонемент"
 export default function AdminPage() {
   const navigate = useNavigate();
   const { profile, loading: authLoading } = useAuth();

@@ -2,6 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Loading from "./ui/Loading";
 
+// TODO: пометки, что Topbar рендерится всегда для авторизованных; 403/401 заглушки
 export default function ProtectedRoute({ children }) {
   const { session, isSupabaseConfigured } = useAuth();
   const location = useLocation();

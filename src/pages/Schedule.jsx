@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import Loading from '../components/ui/Loading'
 
 export default function SchedulePage() {
+  // TODO: фильтры (teacher, class, status), загрузка lessons с пагинацией, пустые состояния
   const [filters, setFilters] = useState({ teacher: '', className: '', status: '' })
   const [lessons, setLessons] = useState([])
   const [teachers, setTeachers] = useState([])

@@ -5,6 +5,7 @@ import PageHeader from '../components/ui/PageHeader'
 import Section from '../components/ui/Section'
 
 export default function DashboardStudent() {
+  // TODO: вывести карточки "Абонемент/Осталось занятий", "Ближайший урок", "Прогресс", кнопки в материалы и ДЗ
   const [subscription, setSubscription] = useState(null)
   const [upcoming, setUpcoming] = useState([])
   const [past, setPast] = useState([])
