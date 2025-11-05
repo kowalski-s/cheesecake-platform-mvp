@@ -10,6 +10,7 @@ export default function SchedulePage() {
   const [teachers, setTeachers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const withTimeout = (p, ms = 8000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
 
   useEffect(() => {
     const init = async () => {
@@ -18,11 +19,10 @@ export default function SchedulePage() {
         setError('Supabase не настроен')
         return
       }
-      
       try {
-        const { data: ts } = await supabase.from('teachers').select('id, display_name').order('display_name')
+        const { data: ts } = await withTimeout(supabase.from('teachers').select('id, display_name').order('display_name'), 8000)
         setTeachers(ts || [])
-        await load()
+        await withTimeout(load(), 8000)
       } catch (err) {
         console.error('Ошибка загрузки данных:', err)
         setError('Не удалось загрузить данные')
@@ -33,14 +33,18 @@ export default function SchedulePage() {
     init()
   }, [])
 
-  const load = async () => {
+  const load = async (override) => {
     setLoading(true)
     try {
-      let query = supabase.from('lessons').select('id, title, start_at, status, teacher:teachers(display_name), class_name, student:students(display_name)').order('start_at', { ascending: true })
-      if (filters.teacher) query = query.eq('teacher_id', filters.teacher)
-      if (filters.className) query = query.ilike('class_name', `%${filters.className}%`)
-      if (filters.status) query = query.eq('status', filters.status)
-      const { data } = await query
+      const f = override ?? filters
+      let query = supabase
+        .from('lessons')
+        .select('id, title, start_at, status, teacher:teachers(display_name), class_name, student:students(display_name)')
+        .order('start_at', { ascending: true })
+      if (f.teacher) query = query.eq('teacher_id', f.teacher)
+      if (f.className) query = query.ilike('class_name', `%${f.className}%`)
+      if (f.status) query = query.eq('status', f.status)
+      const { data } = await withTimeout(query, 8000)
       setLessons(data || [])
     } catch (err) {
       console.error('Ошибка загрузки занятий:', err)

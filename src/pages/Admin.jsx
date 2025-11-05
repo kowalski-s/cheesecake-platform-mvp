@@ -10,7 +10,7 @@ import Loading from "../components/ui/Loading";
 // TODO: вкладки Ученики/Преподаватели/Материалы, модалки добавления, фильтр "заканчивается абонемент"
 export default function AdminPage() {
   const navigate = useNavigate();
-  const { profile, loading: authLoading } = useAuth();
+  const { profile, role, loading: authLoading } = useAuth();
 
   const [activeTab, setActiveTab] = useState("students");
   const [students, setStudents] = useState([]);
@@ -33,14 +33,12 @@ export default function AdminPage() {
   });
 
   useEffect(() => {
-    if (!authLoading && profile && profile.role !== "admin") {
-      navigate("/");
-      return;
-    }
-    if (!authLoading && profile) {
+    // Раньше была внутренняя проверка роли и редирект.
+    // Теперь доступ контролируется через RoleGuard на уровне маршрута.
+    if (!authLoading) {
       loadData();
     }
-  }, [authLoading, profile, navigate]);
+  }, [authLoading]);
 
   async function loadData() {
     setLoading(true);
@@ -134,21 +132,11 @@ export default function AdminPage() {
         description="Управление учениками, преподавателями и материалами"
       />
 
-      {/* пока грузится авторизация */}
-      {authLoading && <Loading />}
-
-      {/* нет прав */}
-      {!authLoading && profile?.role !== "admin" && (
-        <div className="card p-8 text-center">
-          <h2 className="text-xl font-semibold mb-2">Доступ запрещён</h2>
-          <p className="text-gray-600">
-            У вас нет прав администратора для доступа к этой странице.
-          </p>
-        </div>
-      )}
+      {/* Dev-баннер роли для отладки */}
+      <div className="text-xs text-gray-400">role: {(role ?? profile?.role)?.trim()?.toLowerCase() ?? 'unknown'}</div>
 
       {/* основное содержимое */}
-      {!authLoading && profile?.role === "admin" && (
+      {!authLoading && (
         <>
           {/* табы */}
           <div className="border-b border-gray-200">

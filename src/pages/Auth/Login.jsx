@@ -23,21 +23,8 @@ export default function Login() {
     if (error) {
       setError(error.message)
     } else {
-      // After login, route by role
-      const userId = (await supabase.auth.getUser()).data.user?.id
-      if (userId) {
-        const { data } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', userId)
-          .maybeSingle()
-        const role = data?.role
-        if (role === 'admin') navigate('/admin')
-        else if (role === 'teacher') navigate('/teacher')
-        else navigate('/dashboard')
-      } else {
-        navigate('/dashboard')
-      }
+      // После логина всегда приземляемся на главную
+      navigate('/')
     }
   }
 

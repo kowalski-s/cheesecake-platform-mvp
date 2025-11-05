@@ -12,6 +12,7 @@ import { useAuth } from "./context/AuthContext";
 import Login from "./pages/Auth/Login";
 import Register from "./pages/Auth/Register";
 import ForgotPassword from "./pages/Auth/ForgotPassword";
+import Logout from "./pages/Auth/Logout";
 import HomePage from "./pages/Home";
 import DashboardStudent from "./pages/DashboardStudent";
 import StudentsPage from "./pages/Students";
@@ -19,17 +20,20 @@ import DashboardTeacher from "./pages/DashboardTeacher";
 import SchedulePage from "./pages/Schedule";
 import MaterialsPage from "./pages/Materials";
 import AdminPage from "./pages/Admin";
+import TeacherProfile from "./pages/TeacherProfile";
+import AdminProfile from "./pages/AdminProfile";
 import TeachersPage from "./pages/Teachers";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleGuard from "./components/RoleGuard";
 import Loading from "./components/ui/Loading";
 import AppLayout from "./layouts/AppLayout";
+import UserMenu from "./components/UserMenu";
 
 function App() {
   const { profile, initializing } = useAuth();
   const location = useLocation();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const isAuthPage = ["/login", "/register", "/forgot"].includes(
+  const isAuthPage = ["/login", "/register", "/forgot", "/logout"].includes(
     location.pathname
   );
 
@@ -45,6 +49,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot" element={<ForgotPassword />} />
+            <Route path="/logout" element={<Logout />} />
           </Routes>
         ) : (
           <AppLayout
@@ -63,7 +68,7 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <RoleGuard allow={["teacher", "admin"]}>
-                        <DashboardTeacher />
+                        <TeacherProfile />
                       </RoleGuard>
                     </ProtectedRoute>
                   }
@@ -94,6 +99,17 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
+
+                <Route
+                  path="/admin-profile"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["admin"]}>
+                        <AdminProfile />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/teachers"
                   element={
@@ -106,7 +122,7 @@ function App() {
                   path="/student"
                   element={
                     <ProtectedRoute>
-                      <RoleGuard allow={["student"]}>
+                      <RoleGuard allow={["student", "admin"]}>
                         <StudentsPage />
                       </RoleGuard>
                     </ProtectedRoute>
@@ -125,50 +141,7 @@ function App() {
 }
 
 function Topbar({ onToggleSidebar }) {
-  const { profile, session, signOut } = useAuth();
-  const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  // Закрытие дропдауна по Escape и клику вне
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    const onClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("mousedown", onClickOutside);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("mousedown", onClickOutside);
-    };
-  }, []);
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate("/");
-    setMenuOpen(false);
-  };
-
-  const role = profile?.role;
-  const displayName = profile?.display_name || "";
-  const email = session?.user?.email || "";
-  const initials = (() => {
-    const name = displayName.trim();
-    if (name) {
-      const parts = name.split(/\s+/);
-      const first = parts[0]?.[0] || "";
-      const second = parts.length > 1 ? parts[1]?.[0] || "" : "";
-      const res = `${first}${second}`.toUpperCase();
-      if (res) return res;
-    }
-    const letter = email.split("@")[0]?.[0] || "?";
-    return String(letter).toUpperCase();
-  })();
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200/60 dark:bg-slate-900/70 dark:border-slate-800/60">
@@ -181,7 +154,7 @@ function Topbar({ onToggleSidebar }) {
 
         {/* Center: navigation removed; sidebar handles navigation */}
 
-        {/* Right: avatar dropdown + mobile toggle */}
+        {/* Right: user menu or login + mobile toggle */}
         <div className="flex items-center gap-3">
           {/* Mobile menu button */}
           <button
@@ -192,43 +165,10 @@ function Topbar({ onToggleSidebar }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-
-          {profile && (
-            <div className="relative" ref={dropdownRef}>
-              <button
-                className="hidden md:flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-700 font-semibold"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen(!menuOpen)}
-              >
-                {initials}
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 mt-2 w-56 rounded-xl border bg-white shadow-lg p-1 z-50">
-                  {role === "student" && (
-                    <NavLink
-                      className={({ isActive }) => `block rounded-lg px-3 py-2 ${isActive ? "bg-brand/10 text-brand font-semibold" : "text-gray-700 hover:bg-gray-50"}`}
-                      to="/student"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      Профиль
-                    </NavLink>
-                  )}
-                  {role === "admin" && (
-                    <NavLink
-                      className={({ isActive }) => `block rounded-lg px-3 py-2 ${isActive ? "bg-brand/10 text-brand font-semibold" : "text-gray-700 hover:bg-gray-50"}`}
-                      to="/admin"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      Админ
-                    </NavLink>
-                  )}
-                  <div className="my-1 h-px bg-gray-200" />
-                  <button className="block w-full text-left rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50">Настройки</button>
-                  <button className="block w-full text-left rounded-lg px-3 py-2 text-red-600 hover:bg-red-50" onClick={handleSignOut}>Выйти</button>
-                </div>
-              )}
-            </div>
+          {user ? (
+            <UserMenu />
+          ) : (
+            <NavLink to="/login" className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100">Войти</NavLink>
           )}
         </div>
       </div>

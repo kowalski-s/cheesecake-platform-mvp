@@ -3,8 +3,8 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function AppLayout({ children, mobileSidebarOpen = false, onCloseSidebar = () => {} }) {
-  const { profile } = useAuth();
-  const role = profile?.role;
+  const { role: ctxRole, profile } = useAuth();
+  const role = (ctxRole ?? profile?.role)?.trim()?.toLowerCase() ?? null;
   const firstLinkRef = useRef(null);
   const closeButtonRef = useRef(null);
   const overlayRef = useRef(null);
@@ -100,12 +100,13 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
             <div className="my-2 h-px bg-slate-200/60 dark:bg-slate-800/60" />
             <NavLink
               to="/admin"
+              aria-label="Админ-панель"
               className={({ isActive }) =>
                 `rounded-lg px-3 py-2 transition ${isActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`
               }
               aria-current={({ isActive }) => (isActive ? "page" : undefined)}
             >
-              Админ
+              Админ-панель
             </NavLink>
           </div>
         )}
