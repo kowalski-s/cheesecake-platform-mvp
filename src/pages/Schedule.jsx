@@ -1,15 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { format } from 'date-fns'
 import Loading from '../components/ui/Loading'
+import { useAuth } from '../context/AuthContext'
 
 export default function SchedulePage() {
-  // TODO: фильтры (teacher, class, status), загрузка lessons с пагинацией, пустые состояния
+  const { role, user } = useAuth()
+  const normalizedRole = useMemo(() => role?.trim()?.toLowerCase() ?? null, [role])
+  const canEdit = normalizedRole === 'admin' || normalizedRole === 'teacher'
+  const isStudent = normalizedRole === 'student'
+  // фильтры (teacher, class, status), загрузка lessons с пагинацией, пустые состояния
   const [filters, setFilters] = useState({ teacher: '', className: '', status: '' })
   const [lessons, setLessons] = useState([])
   const [teachers, setTeachers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [toast, setToast] = useState(null)
   const withTimeout = (p, ms = 8000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
 
   useEffect(() => {
@@ -58,6 +64,19 @@ export default function SchedulePage() {
     const next = { ...filters, [field]: value }
     setFilters(next)
     load(next)
+  }
+
+
+  const setStatus = async (lessonId, status) => {
+    try {
+      if (!canEdit) return
+      const { error } = await supabase.from('lessons').update({ status }).eq('id', lessonId)
+      if (error) throw error
+      setLessons(lessons.map(l => l.id === lessonId ? { ...l, status } : l))
+    } catch (e) {
+      console.error('update status failed', e)
+      setToast({ type: 'error', msg: 'Не удалось обновить статус' })
+    }
   }
 
   return (
@@ -109,6 +128,8 @@ export default function SchedulePage() {
             </div>
           </div>
 
+          {/* Форма создания занятия удалена согласно требованиям; оставляем только список и фильтры */}
+
           <section className="card">
             <h2 className="mb-3 text-lg font-semibold">Занятия</h2>
             <ul className="divide-y divide-gray-100">
@@ -118,7 +139,15 @@ export default function SchedulePage() {
                     <div className="font-medium">{l.title} <span className="text-gray-400">({l.class_name})</span></div>
                     <div className="text-sm text-gray-500">{format(new Date(l.start_at), 'dd.MM.yyyy HH:mm')} • {l.teacher?.display_name} • {l.student?.display_name}</div>
                   </div>
-                  <span className="rounded-xl bg-gray-50 px-3 py-1 text-sm text-gray-700">{l.status}</span>
+                  {canEdit ? (
+                    <select className="input w-36" value={l.status} onChange={(e) => setStatus(l.id, e.target.value)}>
+                      <option value="planned">Запланировано</option>
+                      <option value="done">Проведено</option>
+                      <option value="canceled">Отменено</option>
+                    </select>
+                  ) : (
+                    <span className="rounded-xl bg-gray-50 px-3 py-1 text-sm text-gray-700">{l.status}</span>
+                  )}
                 </li>
               ))}
               {lessons.length === 0 && (
@@ -131,6 +160,10 @@ export default function SchedulePage() {
               )}
             </ul>
           </section>
+
+          {toast && (
+            <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast?.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast?.msg}</div>
+          )}
         </>
       )}
     </div>

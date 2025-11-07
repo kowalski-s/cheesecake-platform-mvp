@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import PageHeader from "../components/ui/PageHeader";
 import Section from "../components/ui/Section";
 import Loading from "../components/ui/Loading";
+import InviteUserModal from "../components/InviteUserModal";
 
 // TODO: вкладки Ученики/Преподаватели/Материалы, модалки добавления, фильтр "заканчивается абонемент"
 export default function AdminPage() {
@@ -19,6 +20,12 @@ export default function AdminPage() {
   const [filterEnding, setFilterEnding] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Модалка приглашения пользователя
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteDefaultRole, setInviteDefaultRole] = useState("teacher");
+  const [toastMsg, setToastMsg] = useState(null);
+  const [toastType, setToastType] = useState("success");
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({
@@ -39,6 +46,13 @@ export default function AdminPage() {
       loadData();
     }
   }, [authLoading]);
+
+  // авто-скрытие toast
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = setTimeout(() => setToastMsg(null), 3000);
+    return () => clearTimeout(t);
+  }, [toastMsg]);
 
   async function loadData() {
     setLoading(true);
@@ -193,14 +207,8 @@ export default function AdminPage() {
                       </label>
                       <button
                         onClick={() => {
-                          setFormData({
-                            display_name: "",
-                            email: "",
-                            role: "student",
-                            teacher_id: "",
-                            remaining_lessons: 0,
-                          });
-                          setShowAddModal(true);
+                          setInviteDefaultRole("student");
+                          setInviteOpen(true);
                         }}
                         className="rounded-xl bg-orange-500 px-3 py-1.5 text-sm text-white"
                       >
@@ -278,12 +286,8 @@ export default function AdminPage() {
                   action={
                     <button
                       onClick={() => {
-                        setFormData({
-                          display_name: "",
-                          role: "teacher",
-                          bio: "",
-                        });
-                        setShowAddModal(true);
+                        setInviteDefaultRole("teacher");
+                        setInviteOpen(true);
                       }}
                       className="rounded-xl bg-orange-500 px-3 py-1.5 text-sm text-white"
                     >
@@ -291,6 +295,8 @@ export default function AdminPage() {
                     </button>
                   }
                 >
+                  {/* Форма приглашения перенесена в InviteUserModal */}
+
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead>
@@ -404,7 +410,7 @@ export default function AdminPage() {
           )}
 
           {/* МОДАЛКА — ВНУТРИ КОРНЕВОГО DIV */}
-          {showAddModal && (
+          {showAddModal && activeTab === "materials" && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
               <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg relative">
                 <button
@@ -540,6 +546,24 @@ export default function AdminPage() {
                   </form>
                 </div>
               </div>
+            </div>
+          )}
+          {/* InviteUserModal */}
+          <InviteUserModal
+            isOpen={inviteOpen}
+            onClose={() => setInviteOpen(false)}
+            defaultRole={inviteDefaultRole}
+            onSuccess={async () => {
+              setInviteOpen(false);
+              setToastType("success");
+              setToastMsg("Приглашение отправлено");
+              await loadData();
+            }}
+          />
+          {/* Toast */}
+          {toastMsg && (
+            <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toastType === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"}`}>
+              {toastMsg}
             </div>
           )}
         </>

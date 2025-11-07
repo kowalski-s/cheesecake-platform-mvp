@@ -4,8 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import Loading from "./ui/Loading";
 
 // TODO: пометки, что Topbar рендерится всегда для авторизованных; 403/401 заглушки
-export default function ProtectedRoute({ children }) {
-  const { initializing, user } = useAuth();
+export default function ProtectedRoute({ children, role = null }) {
+  const { initializing, user, role: ctxRole } = useAuth();
   const location = useLocation();
   const [initDeadlinePassed, setInitDeadlinePassed] = useState(false);
 
@@ -32,6 +32,18 @@ export default function ProtectedRoute({ children }) {
   }
 
   // После тайм-аута или завершения инициализации — пропускаем контент
+
+  // Если требуется роль — проверяем
+  const normalizedRole = ctxRole?.trim()?.toLowerCase() ?? null;
+  if (role && normalizedRole && normalizedRole !== role) {
+    return (
+      <Navigate
+        to="/"
+        replace
+        state={{ toast: { type: 'error', message: 'Нет доступа' } }}
+      />
+    );
+  }
 
   // Авторизованы — пропускаем контент
   return <>{children}</>;

@@ -19,7 +19,14 @@ import StudentsPage from "./pages/Students";
 import DashboardTeacher from "./pages/DashboardTeacher";
 import SchedulePage from "./pages/Schedule";
 import MaterialsPage from "./pages/Materials";
-import AdminPage from "./pages/Admin";
+import AdminUsersPage from "./pages/AdminUsers";
+import AdminTeachersPage from "./pages/AdminTeachers";
+import AdminStudentsPage from "./pages/AdminStudents";
+import AdminLayout from "./pages/admin/AdminLayout";
+import AdminMaterialsPage from "./pages/AdminMaterials";
+import AdminLessonsPage from "./pages/AdminLessons";
+import AdminStudentProfile from "./pages/admin/StudentProfile";
+import AdminTeacherProfile from "./pages/admin/TeacherProfile";
 import TeacherProfile from "./pages/TeacherProfile";
 import AdminProfile from "./pages/AdminProfile";
 import TeachersPage from "./pages/Teachers";
@@ -92,13 +99,20 @@ function App() {
                 <Route
                   path="/admin"
                   element={
-                    <ProtectedRoute>
-                      <RoleGuard allow={["admin"]}>
-                        <AdminPage />
-                      </RoleGuard>
+                    <ProtectedRoute role="admin">
+                      <AdminLayout />
                     </ProtectedRoute>
                   }
-                />
+                >
+                  <Route index element={<Navigate to="students" replace />} />
+                  <Route path="students" element={<AdminStudentsPage />} />
+                  <Route path="students/:id" element={<AdminStudentProfile />} />
+                  <Route path="teachers" element={<AdminTeachersPage />} />
+                  <Route path="teachers/:id" element={<AdminTeacherProfile />} />
+                  <Route path="users" element={<AdminUsersPage />} />
+                  <Route path="materials" element={<AdminMaterialsPage />} />
+                  <Route path="lessons" element={<AdminLessonsPage />} />
+                </Route>
 
                 <Route
                   path="/admin-profile"
@@ -114,15 +128,17 @@ function App() {
                   path="/teachers"
                   element={
                     <ProtectedRoute>
-                      <TeachersPage />
+                      <RoleGuard allow={["teacher", "admin"]}>
+                        <TeachersPage />
+                      </RoleGuard>
                     </ProtectedRoute>
                   }
                 />
                 <Route
-                  path="/student"
+                  path="/students/me"
                   element={
                     <ProtectedRoute>
-                      <RoleGuard allow={["student", "admin"]}>
+                      <RoleGuard allow={["student"]}>
                         <StudentsPage />
                       </RoleGuard>
                     </ProtectedRoute>

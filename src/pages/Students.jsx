@@ -41,11 +41,11 @@ export default function Students() {
         // Параллельно тянем информацию об ученике, подписке и ближайшем уроке
         const nowIso = new Date().toISOString()
 
-        const [studentRes, subsRes, lessonsRes] = await Promise.all([
+        const [studentRes, subsRes] = await Promise.all([
           supabase
             .from('students')
-            .select('id, display_name, teacher_id, remaining_lessons')
-            .eq('id', user.id)
+            .select('id, display_name, teacher_id, remaining_lessons, user_id')
+            .eq('user_id', user.id)
             .maybeSingle(),
           supabase
             .from('subscriptions')
@@ -54,14 +54,6 @@ export default function Students() {
             .eq('active', true)
             .order('created_at', { ascending: false })
             .limit(1),
-          supabase
-            .from('lessons')
-            .select('id, title, class_name, start_at, status, teacher_id, duration')
-            .eq('student_id', user.id)
-            .gte('start_at', nowIso)
-            .order('start_at', { ascending: true })
-            .limit(1)
-            .maybeSingle()
         ])
 
         // Помощник: игнорируем "пустые" ошибки (нет строк)
@@ -74,10 +66,22 @@ export default function Students() {
 
         const studentData = studentRes.data || null
         const subscriptionData = Array.isArray(subsRes.data) && subsRes.data.length > 0 ? subsRes.data[0] : null
-        const nextLessonData = lessonsRes.data || null
+        // Next lesson: fetch separately using student.id if exists
+        let nextLessonData = null
+        if (studentData?.id) {
+          const { data: nextL } = await supabase
+            .from('lessons')
+            .select('id, title, class_name, start_at, status, teacher_id, duration')
+            .eq('student_id', studentData.id)
+            .gte('start_at', nowIso)
+            .order('start_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+          nextLessonData = nextL || null
+        }
 
         // Устанавливаем глобальную ошибку только если она не про "0 rows"
-        const possibleErrors = [studentRes.error, subsRes.error, lessonsRes.error].filter(Boolean)
+        const possibleErrors = [studentRes.error, subsRes.error].filter(Boolean)
         const significantError = possibleErrors.find((e) => !isNoRowsError(e)) || null
         if (significantError) {
           setError(significantError)

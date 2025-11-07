@@ -35,7 +35,7 @@ export default function UserMenu() {
     return String(letter).toUpperCase()
   }, [displayName, email])
 
-  const profilePath = normalizedRole === "student" ? "/student" : normalizedRole === "teacher" ? "/teacher" : normalizedRole === "admin" ? "/admin-profile" : "/"
+  const profilePath = normalizedRole === "student" ? "/students/me" : normalizedRole === "teacher" ? "/teacher" : normalizedRole === "admin" ? "/admin-profile" : "/"
 
   if (!user) {
     return null

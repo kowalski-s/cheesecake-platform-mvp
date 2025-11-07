@@ -32,8 +32,8 @@ export default function DashboardStudent() {
           // Получаем данные ученика, включая teacher_id
           const { data: studentData } = await supabase
             .from('students')
-            .select('id, teacher_id, remaining_lessons')
-            .eq('id', user.id)
+            .select('id, teacher_id, remaining_lessons, user_id')
+            .eq('user_id', user.id)
             .maybeSingle()
           
           // Если у ученика есть преподаватель, получаем его данные
@@ -50,8 +50,8 @@ export default function DashboardStudent() {
           // Получаем остальные данные
           const [{ data: subs }, { data: lessons }, { data: prog }] = await Promise.all([
             supabase.from('subscriptions').select('*').eq('user_id', user.id).eq('active', true).maybeSingle(),
-            supabase.from('lessons').select('id, title, start_at, status, teacher:teachers(display_name)').eq('student_id', user.id).order('start_at', { ascending: true }),
-            supabase.from('progress').select('*').eq('student_id', user.id).order('updated_at', { ascending: false }),
+            supabase.from('lessons').select('id, title, start_at, status, teacher:teachers(display_name)').eq('student_id', studentData?.id ?? '00000000-0000-0000-0000-000000000000').order('start_at', { ascending: true }),
+            supabase.from('progress').select('*').eq('student_id', studentData?.id ?? '00000000-0000-0000-0000-000000000000').order('updated_at', { ascending: false }),
           ])
 
           setSubscription(subs || null)

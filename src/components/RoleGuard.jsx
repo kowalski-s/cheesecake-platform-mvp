@@ -41,9 +41,15 @@ export default function RoleGuard({ allow = [], children }) {
     )
   }
 
-  // Если список allow задан и роль не входит — редиректим на главную
+  // Если список allow задан и роль не входит — редиректим на главную с тостом
   if (Array.isArray(allow) && allow.length > 0 && !allow.includes(normalizedRole)) {
-    return <Navigate to="/" replace />
+    return (
+      <Navigate
+        to="/"
+        replace
+        state={{ toast: { type: 'error', message: 'Нет доступа' } }}
+      />
+    )
   }
 
   return children
