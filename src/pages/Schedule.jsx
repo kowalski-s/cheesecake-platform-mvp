@@ -12,6 +12,9 @@ export default function SchedulePage() {
   // фильтры (teacher, class, status), загрузка lessons с пагинацией, пустые состояния
   const [filters, setFilters] = useState({ teacher: '', className: '', status: '' })
   const [lessons, setLessons] = useState([])
+  const [page, setPage] = useState(0)
+  const pageSize = 20
+  const [total, setTotal] = useState(0)
   const [teachers, setTeachers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -45,16 +48,22 @@ export default function SchedulePage() {
       const f = override ?? filters
       let query = supabase
         .from('lessons')
-        .select('id, title, start_at, status, teacher:teachers(display_name), class_name, student:students(display_name)')
+        .select('id, title, start_at, status, teacher:teachers(display_name), class_name, student:students(display_name)', { count: 'exact' })
         .order('start_at', { ascending: true })
       if (f.teacher) query = query.eq('teacher_id', f.teacher)
       if (f.className) query = query.ilike('class_name', `%${f.className}%`)
       if (f.status) query = query.eq('status', f.status)
-      const { data } = await withTimeout(query, 8000)
+      const from = page * pageSize
+      const to = from + pageSize - 1
+      const { data, count, error } = await withTimeout(query.range(from, to), 8000)
+      if (error) throw error
       setLessons(data || [])
+      setTotal(count || 0)
     } catch (err) {
       console.error('Ошибка загрузки занятий:', err)
-      setError(err?.message || 'Не удалось загрузить занятия')
+      const msg = err?.message || 'Не удалось загрузить расписание'
+      setError(msg)
+      setToast({ type: 'error', msg })
     } finally {
       setLoading(false)
     }
@@ -63,6 +72,7 @@ export default function SchedulePage() {
   const update = (field, value) => {
     const next = { ...filters, [field]: value }
     setFilters(next)
+    setPage(0)
     load(next)
   }
 
@@ -99,31 +109,87 @@ export default function SchedulePage() {
       ) : (
         <>
           <div className="card">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div>
-                <label className="mb-1 block text-sm text-gray-600">Преподаватель</label>
-                <select className="input" value={filters.teacher} onChange={(e) => update('teacher', e.target.value)}>
-                  <option value="">Все</option>
-                  {teachers.map(t => (
-                    <option key={t.id} value={t.id}>{t.display_name}</option>
-                  ))}
-                </select>
+            {/* Toolbar: Фильтры слева, пагинация справа */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+              {/* Левая часть: три фильтра + кнопка Обновить */}
+              <div className="flex flex-wrap items-end gap-3 lg:flex-nowrap lg:gap-4">
+                <div>
+                  <label className="mb-1 block text-sm text-gray-600">Преподаватель</label>
+                  <select className="input" value={filters.teacher} onChange={(e) => update('teacher', e.target.value)}>
+                    <option value="">Все</option>
+                    {teachers.map(t => (
+                      <option key={t.id} value={t.id}>{t.display_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm text-gray-600">Класс</label>
+                  <input className="input" value={filters.className} onChange={(e) => update('className', e.target.value)} placeholder="например HSK1" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm text-gray-600">Статус</label>
+                  <select className="input" value={filters.status} onChange={(e) => update('status', e.target.value)}>
+                    <option value="">Любой</option>
+                    <option value="planned">Запланировано</option>
+                    <option value="done">Проведено</option>
+                    <option value="canceled">Отменено</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    className="btn-outline"
+                    onClick={() => { setPage(0); load(); }}
+                    aria-label="Обновить список занятий"
+                    title="Обновить список занятий"
+                  >
+                    Обновить
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-sm text-gray-600">Класс</label>
-                <input className="input" value={filters.className} onChange={(e) => update('className', e.target.value)} placeholder="например HSK1" />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm text-gray-600">Статус</label>
-                <select className="input" value={filters.status} onChange={(e) => update('status', e.target.value)}>
-                  <option value="">Любой</option>
-                  <option value="planned">Запланировано</option>
-                  <option value="done">Проведено</option>
-                  <option value="canceled">Отменено</option>
-                </select>
-              </div>
-              <div className="flex items-end">
-                <button className="btn-outline w-full" onClick={load}>Обновить</button>
+
+              {/* Правая часть: компактная пагинация */}
+              <div className="mt-2 sm:mt-2 lg:mt-0 self-center sm:self-end min-h-[40px] flex items-center justify-center sm:justify-end gap-2">
+                <button
+                  className="btn-outline min-w-[84px]"
+                  onClick={() => { setPage(Math.max(0, page - 1)); load(); }}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && page > 0) {
+                      e.preventDefault()
+                      setPage(Math.max(0, page - 1))
+                      load()
+                    }
+                  }}
+                  disabled={page === 0}
+                  aria-label="Предыдущая страница"
+                  title="Предыдущая страница"
+                >
+                  Назад
+                </button>
+                <span className="text-sm text-gray-600">Стр. {page + 1} / {Math.max(1, Math.ceil((total || 0) / pageSize))}</span>
+                <button
+                  className="btn-outline min-w-[84px]"
+                  onClick={() => {
+                    const maxPages = Math.max(1, Math.ceil((total || 0) / pageSize))
+                    const nextPage = Math.min(maxPages - 1, page + 1)
+                    setPage(nextPage)
+                    load()
+                  }}
+                  onKeyDown={(e) => {
+                    const maxPages = Math.max(1, Math.ceil((total || 0) / pageSize))
+                    const isDisabled = (page + 1) >= maxPages
+                    if ((e.key === 'Enter' || e.key === ' ') && !isDisabled) {
+                      e.preventDefault()
+                      const nextPage = Math.min(maxPages - 1, page + 1)
+                      setPage(nextPage)
+                      load()
+                    }
+                  }}
+                  disabled={(page + 1) >= Math.max(1, Math.ceil((total || 0) / pageSize))}
+                  aria-label="Следующая страница"
+                  title="Следующая страница"
+                >
+                  Вперёд
+                </button>
               </div>
             </div>
           </div>
@@ -153,7 +219,7 @@ export default function SchedulePage() {
               {lessons.length === 0 && (
                 <li className="py-8">
                   <div className="text-center">
-                    <div className="mb-2 text-sm text-gray-500">У вас пока нет занятий</div>
+                    <div className="mb-2 text-sm text-gray-500">Нет занятий по выбранным фильтрам</div>
                     <a href="/teachers" className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium bg-brand text-white hover:bg-brand-muted">Посмотреть всех преподавателей</a>
                   </div>
                 </li>

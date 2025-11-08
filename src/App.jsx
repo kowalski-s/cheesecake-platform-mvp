@@ -19,6 +19,8 @@ import StudentsPage from "./pages/Students";
 import DashboardTeacher from "./pages/DashboardTeacher";
 import SchedulePage from "./pages/Schedule";
 import MaterialsPage from "./pages/Materials";
+import AssignmentsTeacherPage from "./pages/AssignmentsTeacher";
+import AssignmentsStudentPage from "./pages/AssignmentsStudent";
 import AdminUsersPage from "./pages/AdminUsers";
 import AdminTeachersPage from "./pages/AdminTeachers";
 import AdminStudentsPage from "./pages/AdminStudents";
@@ -93,6 +95,26 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <MaterialsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/assignments/teacher"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["teacher", "admin"]}>
+                        <AssignmentsTeacherPage />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/assignments/student"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["student"]}>
+                        <AssignmentsStudentPage />
+                      </RoleGuard>
                     </ProtectedRoute>
                   }
                 />

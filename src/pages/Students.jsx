@@ -19,6 +19,7 @@ export default function Students() {
   const [student, setStudent] = useState(null)
   const [subscription, setSubscription] = useState(null)
   const [nextLesson, setNextLesson] = useState(null)
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [teacher, setTeacher] = useState(null)
 
   // Редирект, если роль не student
@@ -73,11 +74,24 @@ export default function Students() {
             .from('lessons')
             .select('id, title, class_name, start_at, status, teacher_id, duration')
             .eq('student_id', studentData.id)
+            .in('status', ['planned','rescheduled'])
             .gte('start_at', nowIso)
             .order('start_at', { ascending: true })
             .limit(1)
             .maybeSingle()
           nextLessonData = nextL || null
+        }
+
+        // Прогресс: view student_progress
+        if (studentData?.id) {
+          const { data: sp } = await supabase
+            .from('student_progress')
+            .select('done,total')
+            .eq('student_id', studentData.id)
+            .maybeSingle()
+          setProgress({ done: Number(sp?.done || 0), total: Number(sp?.total || 0) })
+        } else {
+          setProgress({ done: 0, total: 0 })
         }
 
         // Устанавливаем глобальную ошибку только если она не про "0 rows"
@@ -152,7 +166,12 @@ export default function Students() {
             teacherName={teacher?.display_name || null}
           />
 
-          <ProgressCard />
+          <ProgressCard
+            done={progress.done}
+            total={progress.total}
+            percent={Math.round((progress.done * 100) / Math.max(1, progress.total))}
+            emptyText="Прогресс появится после первых уроков"
+          />
         </div>
       </Section>
     </div>

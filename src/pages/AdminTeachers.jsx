@@ -91,11 +91,30 @@ export default function AdminTeachersPage() {
       if (!isAdmin) return
       if (!form.display_name.trim()) { setToast({ type: 'error', msg: 'Введите имя' }); return }
       if (editing?.id) {
-        const { error } = await supabase.from('teachers').update({ display_name: form.display_name.trim(), bio: form.bio || null, user_id: form.user_id || null }).eq('id', editing.id)
+        const { error } = await supabase
+          .from('teachers')
+          .update({ display_name: form.display_name.trim(), bio: form.bio || null, user_id: form.user_id || null })
+          .eq('id', editing.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('teachers').insert({ display_name: form.display_name.trim(), bio: form.bio || null, user_id: form.user_id || null })
-        if (error) throw error
+        // Ручной upsert по user_id: если запись существует, делаем update, иначе insert
+        let existing = null
+        if (form.user_id) {
+          const { data: ex } = await supabase.from('teachers').select('id').eq('user_id', form.user_id).maybeSingle()
+          existing = ex || null
+        }
+        if (existing?.id) {
+          const { error } = await supabase
+            .from('teachers')
+            .update({ display_name: form.display_name.trim(), bio: form.bio || null, user_id: form.user_id || null })
+            .eq('id', existing.id)
+          if (error) throw error
+        } else {
+          const { error } = await supabase
+            .from('teachers')
+            .insert({ display_name: form.display_name.trim(), bio: form.bio || null, user_id: form.user_id || null })
+          if (error) throw error
+        }
       }
       setToast({ type: 'success', msg: 'Сохранено' })
       setEditing(null)

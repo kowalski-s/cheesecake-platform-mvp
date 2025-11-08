@@ -15,6 +15,7 @@ export default function AdminUsersPage() {
   const [error, setError] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [toast, setToast] = useState(null)
+  const [createForm, setCreateForm] = useState({ email: '', role: 'student' })
 
   const load = async () => {
     setLoading(true)
@@ -46,13 +47,49 @@ export default function AdminUsersPage() {
 
   const changeRole = async (userId, newRole) => {
     try {
-      const { error } = await supabase.rpc('admin_set_role', { p_user_id: userId, p_new_role: newRole })
-      if (error) throw error
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      const res = await fetch('/.netlify/functions/admin-users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ action: 'update_role', user_id: userId, role: newRole }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body?.ok) throw new Error(body?.error || `Update role failed (${res.status})`)
       setToast({ type: 'success', msg: 'Роль обновлена' })
       await load()
     } catch (e) {
-      console.error('admin_set_role failed', e)
+      console.error('update_role failed', e)
       setToast({ type: 'error', msg: `Не удалось изменить роль: ${e?.message || 'неизвестная ошибка'}` })
+    }
+  }
+
+  const createUser = async () => {
+    try {
+      const email = createForm.email.trim()
+      const role = createForm.role.trim()
+      if (!email || !role) { setToast({ type: 'error', msg: 'Введите email и роль' }); return }
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      const res = await fetch('/.netlify/functions/admin-users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ action: 'create', email, role }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body?.ok) throw new Error(body?.error || `Create failed (${res.status})`)
+      setToast({ type: 'success', msg: `Создан: ${body?.data?.email} (${body?.data?.role})` })
+      setCreateForm({ email: '', role: 'student' })
+      await load()
+    } catch (e) {
+      console.error('create user failed', e)
+      setToast({ type: 'error', msg: `Создание не удалось: ${e?.message || 'неизвестная ошибка'}` })
     }
   }
 
@@ -103,6 +140,23 @@ export default function AdminUsersPage() {
           <div className="flex items-end justify-end gap-2">
             <button className="btn-outline" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>Назад</button>
             <button className="btn-outline" onClick={() => setPage(page + 1)}>Вперёд</button>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">Email (создать)</label>
+            <input className="input" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} placeholder="user@example.com" />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">Роль</label>
+            <select className="input" value={createForm.role} onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}>
+              <option value="student">student</option>
+              <option value="teacher">teacher</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            <button className="btn-primary w-full" onClick={createUser} disabled={!isAdmin}>Создать пользователя</button>
           </div>
         </div>
       </div>

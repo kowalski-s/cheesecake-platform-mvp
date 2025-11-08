@@ -115,10 +115,16 @@ export default function AdminStudentsPage() {
       if (!form.display_name.trim()) { setToast({ type: 'error', msg: 'Введите имя' }); return }
       const payload = { display_name: form.display_name.trim(), teacher_id: form.teacher_id || null, remaining_lessons: Number(form.remaining_lessons) || 0, user_id: form.user_id || null }
       if (editing?.id) {
-        const { error } = await supabase.from('students').update(payload).eq('id', editing.id)
+        const { error } = await supabase
+          .from('students')
+          .update({ ...payload, user_id: payload.user_id || editing.id })
+          .eq('id', editing.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('students').insert(payload)
+        if (!form.user_id) { setToast({ type: 'error', msg: 'При создании задайте user_id (id = user_id)' }); return }
+        const { error } = await supabase
+          .from('students')
+          .insert({ id: form.user_id, ...payload })
         if (error) throw error
       }
       setToast({ type: 'success', msg: 'Сохранено' })
