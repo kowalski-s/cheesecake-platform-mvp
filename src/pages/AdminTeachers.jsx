@@ -30,10 +30,29 @@ export default function AdminTeachersPage() {
       if (search) query = query.ilike('display_name', `%${search}%`)
       const { data, error } = await query
       if (error) throw error
-      setItems(data || [])
+      const base = data || []
+
+      // Pull user email/display_name from public view v_users_full
+      const userIds = [...new Set(base.map(t => t.user_id).filter(Boolean))]
+      let userInfoById = {}
+      if (userIds.length) {
+        const { data: usersInfo, error: usersErr } = await supabase
+          .from('v_users_full')
+          .select('id, email, display_name')
+          .in('id', userIds)
+        if (usersErr) throw usersErr
+        (usersInfo || []).forEach(u => { userInfoById[u.id] = u })
+      }
+
+      const merged = base.map(t => ({
+        ...t,
+        user_display_name: t.user_id ? userInfoById[t.user_id]?.display_name || null : null,
+        user_email: t.user_id ? userInfoById[t.user_id]?.email || null : null,
+      }))
+      setItems(merged)
     } catch (e) {
       console.error('load teachers failed', e)
-      setError('Не удалось загрузить преподавателей')
+      setError(e?.message || 'Не удалось загрузить преподавателей')
     } finally {
       setLoading(false)
     }
@@ -41,11 +60,17 @@ export default function AdminTeachersPage() {
 
   const loadRoleUsers = async (term = '') => {
     try {
-      const { data, error } = await supabase.rpc('admin_list_role_users', { p_role: 'teacher', p_search: term || null, p_limit: 50, p_offset: 0 })
+      const { data, error } = await supabase
+        .from('v_users_full')
+        .select('id, email, display_name')
+        .eq('role', 'teacher')
+        .order('display_name')
+        .limit(50)
       if (error) throw error
       setUsers(data || [])
     } catch (e) {
       console.error('admin_list_role_users failed', e)
+      setToast({ type: 'error', msg: e?.message || 'Ошибка загрузки пользователей' })
     }
   }
 
@@ -78,7 +103,7 @@ export default function AdminTeachersPage() {
     } catch (e) {
       const msg = String(e?.message || '').toLowerCase()
       const isUnique = msg.includes('duplicate') || msg.includes('unique')
-      setToast({ type: 'error', msg: isUnique ? 'Этот пользователь уже привязан' : 'Ошибка сохранения' })
+      setToast({ type: 'error', msg: isUnique ? 'Этот пользователь уже привязан' : (e?.message || 'Ошибка сохранения') })
     }
   }
 
@@ -89,7 +114,7 @@ export default function AdminTeachersPage() {
       setToast({ type: 'success', msg: 'Привязано' })
       await load()
     } catch (e) {
-      setToast({ type: 'error', msg: 'Не удалось привязать' })
+      setToast({ type: 'error', msg: e?.message || 'Не удалось привязать' })
     }
   }
 
@@ -144,7 +169,10 @@ export default function AdminTeachersPage() {
                   </td>
                   <td className="px-6 py-4">
                     {t.user_id ? (
-                      <span className="text-sm text-gray-700">{t.user_id}</span>
+                      <div>
+                        <div className="text-sm text-gray-700">{t.user_display_name || t.user_id}</div>
+                        {t.user_email && <div className="text-xs text-gray-500">{t.user_email}</div>}
+                      </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <select className="input" onChange={(e) => bindInline(t.id, e.target.value)} defaultValue="">

@@ -31,7 +31,7 @@ export default function SchedulePage() {
         await withTimeout(load(), 8000)
       } catch (err) {
         console.error('Ошибка загрузки данных:', err)
-        setError('Не удалось загрузить данные')
+        setError(err?.message || 'Не удалось загрузить данные')
       } finally {
         setLoading(false)
       }
@@ -54,7 +54,7 @@ export default function SchedulePage() {
       setLessons(data || [])
     } catch (err) {
       console.error('Ошибка загрузки занятий:', err)
-      setError('Не удалось загрузить занятия')
+      setError(err?.message || 'Не удалось загрузить занятия')
     } finally {
       setLoading(false)
     }
@@ -75,7 +75,7 @@ export default function SchedulePage() {
       setLessons(lessons.map(l => l.id === lessonId ? { ...l, status } : l))
     } catch (e) {
       console.error('update status failed', e)
-      setToast({ type: 'error', msg: 'Не удалось обновить статус' })
+      setToast({ type: 'error', msg: `Не удалось обновить статус: ${e?.message || 'неизвестная ошибка'}` })
     }
   }
 

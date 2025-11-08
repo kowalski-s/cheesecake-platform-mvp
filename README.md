@@ -55,6 +55,64 @@ Open http://localhost:5173
    - `VITE_SUPABASE_ANON_KEY`
 5) Deploy. After deploy, update Supabase Auth redirect URLs to include your Netlify domain.
 
+## Local Dev with Netlify
+- cp `.env.example` `.env.local`
+- Fill 4 vars:
+  - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+  - `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
+- Install deps: `npm i`
+- Start Netlify Dev: `npx netlify-cli dev` (or `npm run dev:netlify`)
+- App: `http://localhost:8888` (proxies to Vite `5175`)
+- Functions health: `http://localhost:8888/.netlify/functions/health`
+
+Notes:
+- If port `8888` is busy, change `port = 9999` in `netlify.toml` and re-run.
+- Vite dev server runs on `5175` with `strictPort: true`, so it fails fast if taken.
+- Optional: `npm run check:ports` to detect conflicts on `5175`/`8888` and get Windows-friendly commands to free ports.
+
+### Seed demo data via PowerShell
+Seeder endpoint: `POST /.netlify/functions/seed-demo` (requires admin). Steps:
+
+1) Login locally and make your user an admin (one-time bootstrap):
+- In Supabase, open SQL Editor and run:
+```
+-- replace <your_auth_uid> with your actual auth user id
+insert into public.users (id, role, display_name)
+values ('<your_auth_uid>', 'admin', 'Admin');
+```
+
+2) Get your access token in the browser DevTools Console:
+```
+// in the running app: http://localhost:8888
+const { data: { session } } = await supabase.auth.getSession();
+copy(session.access_token);
+```
+
+3) Call the seeder with PowerShell (Windows):
+```
+$token = Read-Host 'Paste your access token'
+Invoke-RestMethod \
+  -Uri 'http://localhost:8888/.netlify/functions/seed-demo' \
+  -Method POST \
+  -Headers @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' } \
+  -Body '{}'
+```
+
+If you prefer raw output:
+```
+$token = Read-Host 'Paste your access token'
+Invoke-WebRequest \
+  -Uri 'http://localhost:8888/.netlify/functions/seed-demo' \
+  -Method POST \
+  -Headers @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' } \
+  -Body '{}' | Select-Object -ExpandProperty Content
+```
+
+On success, you will see JSON like:
+```
+{ "ok": true, "message": "Демо-данные созданы", "details": { "counts": { ... } } }
+```
+
 ## Roles
 - Roles live in `public.users.role` and are set on registration to `student` by default.
 - Manually update role to `teacher`/`admin` in Supabase if needed.

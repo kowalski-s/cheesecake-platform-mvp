@@ -32,14 +32,35 @@ export default function AdminStudentsPage() {
       const { data, error } = await query
       if (error) throw error
       const base = data || []
-      const ids = base.map(s => s.id)
+
+      // Fetch active subscription info by user_id
+      const ids = base.map(s => s.user_id || s.id).filter(Boolean)
       let subsMap = {}
       if (ids.length) {
-        const { data: subs } = await supabase.from('subscriptions').select('id, user_id, remaining_lessons, active, created_at').in('user_id', ids).eq('active', true)
+        const { data: subs, error: subsErr } = await supabase
+          .from('subscriptions')
+          .select('id, user_id, remaining_lessons, active, created_at')
+          .in('user_id', ids)
+          .eq('active', true)
+        if (subsErr) throw subsErr
         (subs || []).forEach(x => { subsMap[x.user_id] = x })
       }
+
+      // Pull user email/display_name from public view v_users_full
+      const userIds = [...new Set(base.map(s => s.user_id).filter(Boolean))]
+      let userInfoById = {}
+      if (userIds.length) {
+        const { data: usersInfo, error: usersErr } = await supabase
+          .from('v_users_full')
+          .select('id, email, display_name')
+          .in('id', userIds)
+        if (usersErr) throw usersErr
+        (usersInfo || []).forEach(u => { userInfoById[u.id] = u })
+      }
+
       const merged = base.map(s => {
-        const sub = subsMap[s.id]
+        const sub = subsMap[s.user_id || s.id]
+        const uinfo = s.user_id ? userInfoById[s.user_id] : null
         const created = sub?.created_at ? new Date(sub.created_at) : null
         const endAt = created ? new Date(created.getTime() + 30*24*3600*1000) : null
         const daysLeft = endAt ? Math.ceil((endAt.getTime() - Date.now()) / (24*3600*1000)) : null
@@ -47,12 +68,14 @@ export default function AdminStudentsPage() {
           ...s,
           remaining_effective: (sub?.remaining_lessons ?? s.remaining_lessons ?? 0),
           subscription_end_days: daysLeft,
+          user_display_name: uinfo?.display_name || null,
+          user_email: uinfo?.email || null,
         }
       })
       setItems(merged)
     } catch (e) {
       console.error('load students failed', e)
-      setError('Не удалось загрузить учеников')
+      setError(e?.message || 'Не удалось загрузить учеников')
     } finally {
       setLoading(false)
     }
@@ -60,14 +83,17 @@ export default function AdminStudentsPage() {
 
   const loadLists = async () => {
     try {
-      const [{ data: ts }, { data: us }] = await Promise.all([
+      const [{ data: ts, error: tErr }, { data: us, error: uErr }] = await Promise.all([
         supabase.from('teachers').select('id, display_name').order('display_name'),
-        supabase.rpc('admin_list_role_users', { p_role: 'student', p_search: null, p_limit: 50, p_offset: 0 })
+        supabase.from('v_users_full').select('id, email, display_name').eq('role', 'student').order('display_name').limit(50)
       ])
+      if (tErr) throw tErr
+      if (uErr) throw uErr
       setTeachers(ts || [])
       setUsers(us || [])
     } catch (e) {
       console.error('load lists failed', e)
+      setToast({ type: 'error', msg: e?.message || 'Ошибка загрузки списков' })
     }
   }
 
@@ -101,7 +127,7 @@ export default function AdminStudentsPage() {
     } catch (e) {
       const msg = String(e?.message || '').toLowerCase()
       const isUnique = msg.includes('duplicate') || msg.includes('unique')
-      setToast({ type: 'error', msg: isUnique ? 'Этот пользователь уже привязан' : 'Ошибка сохранения' })
+      setToast({ type: 'error', msg: isUnique ? 'Этот пользователь уже привязан' : (e?.message || 'Ошибка сохранения') })
     }
   }
 
@@ -112,7 +138,7 @@ export default function AdminStudentsPage() {
       setToast({ type: 'success', msg: 'Привязано' })
       await load()
     } catch (e) {
-      setToast({ type: 'error', msg: 'Не удалось привязать' })
+      setToast({ type: 'error', msg: e?.message || 'Не удалось привязать' })
     }
   }
 
@@ -186,7 +212,10 @@ export default function AdminStudentsPage() {
                   </td>
                   <td className="px-6 py-4">
                     {s.user_id ? (
-                      <span className="text-sm text-gray-700">{s.user_id}</span>
+                      <div>
+                        <div className="text-sm text-gray-700">{s.user_display_name || s.user_id}</div>
+                        {s.user_email && <div className="text-xs text-gray-500">{s.user_email}</div>}
+                      </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <select className="input" onChange={(e) => bindInline(s.id, e.target.value)} defaultValue="">

@@ -1,12 +1,6 @@
-[build]
-  command = "npm run build"
-  publish = "dist"
-
+## Netlify Dev configuration for local development
 [dev]
-  command = "npm run dev"
-  port = 5173
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+  command = "npm run dev -- --port 5175"
+  port = 9999
+  targetPort = 5175
+  functions = "netlify/functions"

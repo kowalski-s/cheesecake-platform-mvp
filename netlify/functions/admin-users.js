@@ -1,7 +1,7 @@
 // Netlify Function: POST /.netlify/functions/admin-users
 // Admin operations on users (delete). Uses Supabase service key.
 
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './_supabaseClient.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,7 +9,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-export async function handler(event) {
+export const handler = async (event) => {
   try {
     if (event.httpMethod === 'OPTIONS') {
       return { statusCode: 200, headers: corsHeaders, body: '' }
@@ -18,26 +18,22 @@ export async function handler(event) {
       return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ ok: false, error: 'Method Not Allowed' }) }
     }
 
-    const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-    const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-      return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ ok: false, error: 'Supabase env missing' }) }
-    }
-    const client = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    // supabase util throws if env missing; catch and return readable error
+    // (message includes "Missing SUPABASE_URL/SUPABASE_SERVICE_KEY")
 
     const authHeader = event.headers?.authorization || event.headers?.Authorization
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return { statusCode: 401, headers: corsHeaders, body: JSON.stringify({ ok: false, error: 'Unauthorized' }) }
     }
     const token = authHeader.replace(/^Bearer\s+/i, '')
-    const { data: userData, error: getUserError } = await client.auth.getUser(token)
+    const { data: userData, error: getUserError } = await supabase.auth.getUser(token)
     if (getUserError || !userData?.user?.id) {
       return { statusCode: 401, headers: corsHeaders, body: JSON.stringify({ ok: false, error: 'Unauthorized user' }) }
     }
     const callerId = userData.user.id
 
     // Check admin role in public.users
-    const { data: adminRow, error: roleErr } = await client.from('users').select('role').eq('id', callerId).maybeSingle()
+    const { data: adminRow, error: roleErr } = await supabase.from('users').select('role').eq('id', callerId).maybeSingle()
     if (roleErr) {
       return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ ok: false, error: 'Role check failed' }) }
     }
@@ -60,7 +56,7 @@ export async function handler(event) {
     }
 
     if (action === 'delete') {
-      const { error: delErr } = await client.auth.admin.deleteUser(targetUserId)
+      const { error: delErr } = await supabase.auth.admin.deleteUser(targetUserId)
       if (delErr) {
         return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ ok: false, error: delErr.message || 'Delete failed' }) }
       }

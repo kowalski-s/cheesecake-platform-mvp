@@ -35,7 +35,7 @@ export default function TeachersPage() {
       setTeachers(data || []);
     } catch (e) {
       console.error(e);
-      setError("Не удалось загрузить данные");
+      setError(e?.message || "Не удалось загрузить данные");
     } finally {
       setLoading(false);
     }
@@ -53,6 +53,7 @@ export default function TeachersPage() {
         <PageHeader title="Преподаватели" description="Все преподаватели школы" />
         <div className="card p-6 text-center">
           <h2 className="text-xl font-semibold mb-4">Не удалось загрузить данные</h2>
+          <div className="text-sm text-red-600 mb-4">{error}</div>
           <div className="flex justify-center gap-4">
             <button
               onClick={loadTeachers}

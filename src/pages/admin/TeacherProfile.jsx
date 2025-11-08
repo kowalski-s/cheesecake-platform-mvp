@@ -16,20 +16,47 @@ export default function TeacherProfile() {
     setLoading(true)
     setError(null)
     try {
-      const [tRes, sRes, lRes, uRes] = await Promise.all([
-        supabase.from('teachers').select('id, display_name, bio, specialization, user_id').eq('id', id).maybeSingle(),
-        supabase.from('students').select('id, display_name, remaining_lessons').eq('teacher_id', id).order('display_name', { ascending: true }),
-        supabase.from('lessons').select('id, title, start_at, status, student:students(id, display_name)').eq('teacher_id', id).gte('start_at', new Date().toISOString()).order('start_at', { ascending: true }).limit(10),
-        supabase.rpc('admin_get_user', { p_id: id }),
+      const [tRes, sRes, lRes] = await Promise.all([
+        supabase
+          .from('teachers')
+          .select('id, display_name, bio, specialization, user_id')
+          .eq('id', id)
+          .maybeSingle(),
+        supabase
+          .from('students')
+          .select('id, display_name, remaining_lessons')
+          .eq('teacher_id', id)
+          .order('display_name', { ascending: true }),
+        supabase
+          .from('lessons')
+          .select('id, title, start_at, status, student:students(id, display_name)')
+          .eq('teacher_id', id)
+          .gte('start_at', new Date().toISOString())
+          .order('start_at', { ascending: true })
+          .limit(10),
       ])
-      setTeacher(tRes.data || null)
+
+      const teacherRow = tRes.data || null
+      setTeacher(teacherRow)
       setStudents(sRes.data || [])
       setUpcoming(lRes.data || [])
-      const row = Array.isArray(uRes.data) && uRes.data.length > 0 ? uRes.data[0] : null
-      setEmail(row?.email || null)
+
+      // Pull email from public.v_users_full using teacher.user_id
+      const userId = teacherRow?.user_id || teacherRow?.id || null
+      if (userId) {
+        const { data: uRow, error: uErr } = await supabase
+          .from('v_users_full')
+          .select('id, email')
+          .eq('id', userId)
+          .maybeSingle()
+        if (uErr) throw uErr
+        setEmail(uRow?.email || null)
+      } else {
+        setEmail(null)
+      }
     } catch (e) {
       console.error('load teacher profile failed', e)
-      setError('Не удалось загрузить профиль')
+      setError(e?.message || 'Не удалось загрузить профиль')
     } finally {
       setLoading(false)
     }

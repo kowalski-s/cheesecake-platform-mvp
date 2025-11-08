@@ -10,23 +10,31 @@ export default function AdminLayout() {
     try {
       setSeeding(true)
       const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
+      const accessToken = session?.access_token || ''
       const res = await fetch('/.netlify/functions/seed-demo', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({}),
       })
-      if (res.ok) {
-        setToast({ type: 'success', msg: 'Демо-данные добавлены' })
-      } else {
-        const txt = await res.text().catch(() => '')
-        setToast({ type: 'error', msg: txt || 'Ошибка сидера' })
+
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body?.ok) {
+        const msg = body?.message || body?.error || `Seed failed (${res.status})`
+        throw new Error(msg)
       }
+
+      const counts = body?.details?.counts
+      const mk = (o) => o ? `created ${o.created ?? 0}, skipped ${o.skipped ?? 0}` : 'n/a'
+      const msg = counts
+        ? `Демо-данные созданы: users(${mk(counts?.users)}), teachers(${mk(counts?.teachers)}), students(${mk(counts?.students)}), lessons(${mk(counts?.lessons)})`
+        : 'Демо-данные созданы'
+      setToast({ type: 'success', msg })
     } catch (e) {
-      setToast({ type: 'error', msg: 'Ошибка запуска сидера' })
+      const msg = e?.message || 'Ошибка при создании демо-данных'
+      setToast({ type: 'error', msg })
     } finally {
       setSeeding(false)
       setTimeout(() => setToast(null), 3000)

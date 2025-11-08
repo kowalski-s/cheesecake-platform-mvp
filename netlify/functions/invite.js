@@ -2,7 +2,7 @@
 // Node + @supabase/supabase-js@2
 // Invites a user by email and provisions role rows in public tables.
 
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './_supabaseClient.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,7 +10,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-export async function handler(event) {
+export const handler = async (event) => {
   try {
     if (event.httpMethod === 'OPTIONS') {
       return { statusCode: 200, headers: corsHeaders, body: '' }
@@ -24,17 +24,7 @@ export async function handler(event) {
       }
     }
 
-    const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-    const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-      return {
-        statusCode: 500,
-        headers: corsHeaders,
-        body: JSON.stringify({ ok: false, error: 'Supabase env missing' }),
-      }
-    }
-
-    const client = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    // supabase util throws if env missing; UI will display readable toast
 
     // Authorization: Bearer <access_token>
     const authHeader = event.headers?.authorization || event.headers?.Authorization
@@ -48,7 +38,7 @@ export async function handler(event) {
     const token = authHeader.replace(/^Bearer\s+/i, '')
 
     // Validate current user via service client (bypass RLS)
-    const { data: userData, error: getUserError } = await client.auth.getUser(token)
+    const { data: userData, error: getUserError } = await supabase.auth.getUser(token)
     if (getUserError || !userData?.user?.id) {
       return {
         statusCode: 401,
@@ -59,7 +49,7 @@ export async function handler(event) {
     const callerId = userData.user.id
 
     // Check admin role in public.users
-    const { data: adminRow, error: roleErr } = await client
+    const { data: adminRow, error: roleErr } = await supabase
       .from('users')
       .select('role')
       .eq('id', callerId)
@@ -118,7 +108,7 @@ export async function handler(event) {
     }
 
     // Send invite
-    const { data: invited, error: inviteErr } = await client.auth.admin.inviteUserByEmail(email, {
+    const { data: invited, error: inviteErr } = await supabase.auth.admin.inviteUserByEmail(email, {
       data: { display_name },
     })
     if (inviteErr) {
@@ -141,7 +131,7 @@ export async function handler(event) {
     }
 
     // Upsert role in public.users
-    const { error: upUsersErr } = await client
+    const { error: upUsersErr } = await supabase
       .from('users')
       .upsert({ id: invitedId, role })
     if (upUsersErr) {
@@ -154,7 +144,7 @@ export async function handler(event) {
 
     // Upsert profile row and bind user_id
     if (role === 'teacher') {
-      const { error } = await client.from('teachers').upsert({ id: invitedId, display_name, user_id: invitedId })
+      const { error } = await supabase.from('teachers').upsert({ id: invitedId, display_name, user_id: invitedId })
       if (error) {
         return {
           statusCode: 500,
@@ -163,7 +153,7 @@ export async function handler(event) {
         }
       }
     } else if (role === 'student') {
-      const { error } = await client.from('students').upsert({ id: invitedId, display_name, user_id: invitedId })
+      const { error } = await supabase.from('students').upsert({ id: invitedId, display_name, user_id: invitedId })
       if (error) {
         return {
           statusCode: 500,

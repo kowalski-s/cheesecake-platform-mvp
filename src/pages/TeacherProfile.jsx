@@ -6,12 +6,13 @@ export default function TeacherProfile() {
   const { session, role, user } = useAuth();
   const userId = user?.id || session?.user?.id || null;
   const [form, setForm] = useState({ display_name: "", bio: "", specialization: "" });
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const initials = (() => {
-    const email = session?.user?.email || "";
-    return (email.split("@")[0]?.[0] || "?").toUpperCase();
+    const e = email || session?.user?.email || "";
+    return (e.split("@")[0]?.[0] || "?").toUpperCase();
   })();
 
   useEffect(() => {
@@ -25,8 +26,8 @@ export default function TeacherProfile() {
       try {
         const { data, error: fetchError } = await supabase
           .from("teachers")
-          .select("display_name, bio, specialization")
-          .eq("id", userId)
+          .select("id, user_id, display_name, bio, specialization")
+          .eq("user_id", userId)
           .maybeSingle();
         if (fetchError) throw fetchError;
         setForm({
@@ -34,9 +35,21 @@ export default function TeacherProfile() {
           bio: data?.bio || "",
           specialization: data?.specialization || "",
         });
+        const uid = data?.user_id || userId
+        if (uid) {
+          const { data: uRow, error: uErr } = await supabase
+            .from('v_users_full')
+            .select('id, email')
+            .eq('id', uid)
+            .maybeSingle()
+          if (uErr) throw uErr
+          setEmail(uRow?.email || "")
+        } else {
+          setEmail("")
+        }
       } catch (e) {
         console.error(e);
-        setError("Не удалось загрузить профиль");
+        setError(e?.message || "Не удалось загрузить профиль");
       } finally {
         setLoading(false);
       }
@@ -59,11 +72,11 @@ export default function TeacherProfile() {
           bio: form.bio,
           specialization: form.specialization,
         })
-        .eq("id", userId);
+        .eq("user_id", userId);
       if (updateError) throw updateError;
     } catch (e) {
       console.error(e);
-      setError("Не удалось сохранить изменения");
+      setError(e?.message || "Не удалось сохранить изменения");
     } finally {
       setSaving(false);
     }
@@ -79,6 +92,7 @@ export default function TeacherProfile() {
         <div>
           <h1 className="text-2xl font-semibold">Профиль преподавателя</h1>
           <p className="text-gray-500">Редактирование отображаемых данных</p>
+          <div className="mt-1 text-sm text-gray-600">Email: {email || '—'}</div>
         </div>
       </div>
 

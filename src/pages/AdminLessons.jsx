@@ -88,7 +88,7 @@ export default function AdminLessonsPage() {
       setLessons(data || [])
     } catch (err) {
       console.error('Ошибка загрузки занятий:', err)
-      setError('Не удалось загрузить занятия')
+      setError(err?.message || 'Не удалось загрузить занятия')
     } finally {
       setLoading(false)
     }
@@ -124,7 +124,7 @@ export default function AdminLessonsPage() {
       await load()
     } catch (e) {
       console.error('create lesson failed', e)
-      setToast({ type: 'error', msg: 'Не удалось создать занятие' })
+      setToast({ type: 'error', msg: e?.message || 'Не удалось создать занятие' })
     }
   }
 
@@ -135,7 +135,7 @@ export default function AdminLessonsPage() {
       setLessons(lessons.map(l => l.id === lessonId ? { ...l, status } : l))
     } catch (e) {
       console.error('update status failed', e)
-      setToast({ type: 'error', msg: 'Не удалось обновить статус' })
+      setToast({ type: 'error', msg: e?.message || 'Не удалось обновить статус' })
     }
   }
 
@@ -147,7 +147,7 @@ export default function AdminLessonsPage() {
       setToast({ type: 'success', msg: 'Занятие удалено' })
     } catch (e) {
       console.error('delete lesson failed', e)
-      setToast({ type: 'error', msg: 'Не удалось удалить занятие' })
+      setToast({ type: 'error', msg: e?.message || 'Не удалось удалить занятие' })
     }
   }
 

@@ -30,23 +30,47 @@ export default function StudentProfile() {
     setLoading(true)
     setError(null)
     try {
-      const [stuRes, subRes, lesRes, usrRes] = await Promise.all([
-        supabase.from('students').select('id, display_name, teacher_id, remaining_lessons, user_id, teacher:teachers(id, display_name)').eq('id', id).maybeSingle(),
-        supabase.from('subscriptions').select('id, name, remaining_lessons, active, created_at').eq('user_id', id).eq('active', true).order('created_at', { ascending: false }).limit(1),
-        supabase.from('lessons').select('id, title, class_name, start_at, status, teacher:teachers(display_name)').eq('student_id', id).order('start_at', { ascending: false }).limit(10),
-        supabase.rpc('admin_get_user', { p_id: id }),
-      ])
-      const stu = stuRes.data || null
+      // 1) Load student first to get linked user_id
+      const { data: stu, error: stuErr } = await supabase
+        .from('students')
+        .select('id, display_name, teacher_id, remaining_lessons, user_id, teacher:teachers(id, display_name)')
+        .eq('id', id)
+        .maybeSingle()
+      if (stuErr) throw stuErr
+      if (!stu) throw new Error('Ученик не найден')
       setStudent(stu)
+
+      // 2) In parallel: subscriptions by user_id, recent lessons, and user email from v_users_full
+      const [subRes, lesRes, userRes] = await Promise.all([
+        supabase
+          .from('subscriptions')
+          .select('id, name, remaining_lessons, active, created_at')
+          .eq('user_id', stu.user_id)
+          .eq('active', true)
+          .order('created_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('lessons')
+          .select('id, title, class_name, start_at, status, teacher:teachers(display_name)')
+          .eq('student_id', id)
+          .order('start_at', { ascending: false })
+          .limit(10),
+        supabase
+          .from('v_users_full')
+          .select('id, email')
+          .eq('id', stu.user_id)
+          .maybeSingle(),
+      ])
+
       const sub = Array.isArray(subRes.data) && subRes.data.length > 0 ? subRes.data[0] : null
       setSubscription(sub)
       setLessons(lesRes.data || [])
-      const urow = Array.isArray(usrRes.data) && usrRes.data.length > 0 ? usrRes.data[0] : null
+      const urow = userRes?.data || null
       setEmail(urow?.email || null)
       if (sub) setSubForm({ remaining_lessons: sub.remaining_lessons || 0, endDate: addDays(new Date(sub.created_at), 30).toISOString().slice(0, 10) })
     } catch (e) {
       console.error('load student profile failed', e)
-      setError('Не удалось загрузить профиль')
+      setError(e?.message || 'Не удалось загрузить профиль')
     } finally {
       setLoading(false)
     }
@@ -65,7 +89,7 @@ export default function StudentProfile() {
         const { error } = await supabase.from('subscriptions').update(payload).eq('id', subscription.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('subscriptions').insert({ user_id: student.id, ...payload })
+        const { error } = await supabase.from('subscriptions').insert({ user_id: student.user_id, ...payload })
         if (error) throw error
       }
       setToast({ type: 'success', msg: 'Абонемент обновлён' })
@@ -73,7 +97,7 @@ export default function StudentProfile() {
       await load()
     } catch (e) {
       console.error('save subscription failed', e)
-      setToast({ type: 'error', msg: 'Ошибка сохранения абонемента' })
+      setToast({ type: 'error', msg: `Ошибка сохранения абонемента: ${e?.message || 'неизвестная ошибка'}` })
     } finally {
       setTimeout(() => setToast(null), 3000)
     }

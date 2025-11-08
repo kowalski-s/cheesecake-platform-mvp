@@ -33,7 +33,7 @@ export default function AdminUsersPage() {
       setUsers(data || [])
     } catch (e) {
       console.error('admin_list_users failed', e)
-      setError('Не удалось загрузить пользователей')
+      setError(e?.message || 'Не удалось загрузить пользователей')
     } finally {
       setLoading(false)
     }
@@ -52,7 +52,7 @@ export default function AdminUsersPage() {
       await load()
     } catch (e) {
       console.error('admin_set_role failed', e)
-      setToast({ type: 'error', msg: 'Не удалось изменить роль' })
+      setToast({ type: 'error', msg: `Не удалось изменить роль: ${e?.message || 'неизвестная ошибка'}` })
     }
   }
 
@@ -70,14 +70,15 @@ export default function AdminUsersPage() {
       })
       const ok = res.ok
       if (!ok) {
-        setToast({ type: 'error', msg: 'Удаление не удалось' })
+        const msg = await res.text().catch(() => null)
+        setToast({ type: 'error', msg: `Удаление не удалось${msg ? `: ${msg}` : ''}` })
         return
       }
       setToast({ type: 'success', msg: 'Пользователь удалён' })
       await load()
     } catch (e) {
       console.error('delete user failed', e)
-      setToast({ type: 'error', msg: 'Удаление не удалось' })
+      setToast({ type: 'error', msg: `Удаление не удалось: ${e?.message || 'неизвестная ошибка'}` })
     }
   }
 
