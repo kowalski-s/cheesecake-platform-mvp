@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { format } from 'date-fns'
+import { Link } from 'react-router-dom'
 
 export default function DashboardTeacher() {
   // TODO: список учеников, расписание, отметка проведённого урока (patch в lessons.status), проверка ДЗ
@@ -40,10 +41,10 @@ export default function DashboardTeacher() {
         <ul className="divide-y divide-gray-100">
           {schedule.map(l => (
             <li key={l.id} className="flex items-center justify-between py-3">
-              <div>
-                <div className="font-medium">{l.title}</div>
+              <Link to={`/lesson/${l.id}`} className="group">
+                <div className="font-medium group-hover:text-orange-600">{l.title}</div>
                 <div className="text-sm text-gray-500">{format(new Date(l.start_at), 'dd.MM.yyyy HH:mm')} • {l.student?.display_name}</div>
-              </div>
+              </Link>
               <div className="flex items-center gap-2">
                 <span className="rounded-xl bg-gray-50 px-3 py-1 text-sm text-gray-700">{l.status}</span>
                 {l.status !== 'done' && (

@@ -21,6 +21,9 @@ export default function Students() {
   const [nextLesson, setNextLesson] = useState(null)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [teacher, setTeacher] = useState(null)
+  const [myAssignments, setMyAssignments] = useState([])
+  const [subsMap, setSubsMap] = useState({})
+  const [materialsMap, setMaterialsMap] = useState({})
 
   // Редирект, если роль не student
   if (role && role !== 'student') {
@@ -106,7 +109,7 @@ export default function Students() {
         setNextLesson(nextLessonData)
 
         // Если есть teacher_id — подтягиваем имя преподавателя
-        const teacherId = studentData?.teacher_id || nextLessonData?.teacher_id || null
+        const teacherId = nextLessonData?.teacher_id || studentData?.teacher_id || null
         if (teacherId) {
           const { data: teacherData } = await supabase
             .from('teachers')
@@ -116,6 +119,52 @@ export default function Students() {
           setTeacher(teacherData || null)
         } else {
           setTeacher(null)
+        }
+
+        // Мои задания (топ-3 ближайших)
+        if (studentData?.id) {
+          const { data: targets } = await supabase
+            .from('assignment_targets')
+            .select('assignment_id, assignments(id, title, description, due_date, material_id, teacher_id)')
+            .eq('student_id', studentData.id)
+            .order('assignments(due_date)', { ascending: true })
+          const all = (targets || []).map(t => t.assignments).filter(Boolean)
+          const upcoming = all
+            .slice()
+            .sort((a, b) => new Date(a?.due_date || 0).getTime() - new Date(b?.due_date || 0).getTime())
+            .slice(0, 3)
+          setMyAssignments(upcoming)
+
+          // Загрузим метаданные материалов для прикреплённых ДЗ
+          const matIds = upcoming.map(a => a.material_id).filter(Boolean)
+          if (matIds.length > 0) {
+            const { data: mats } = await supabase
+              .from('materials')
+              .select('id, title, storage_path, file_path, file_type')
+              .in('id', matIds)
+            const mm = {}
+            ;(mats || []).forEach(m => { mm[m.id] = m })
+            setMaterialsMap(mm)
+          } else {
+            setMaterialsMap({})
+          }
+          const ids = upcoming.map(a => a.id).filter(Boolean)
+          if (ids.length > 0) {
+            const { data: subs } = await supabase
+              .from('submissions')
+              .select('id, assignment_id, grade, feedback, file_path')
+              .eq('student_id', studentData.id)
+              .in('assignment_id', ids)
+            const m = {}
+            (subs || []).forEach(s => { m[s.assignment_id] = s })
+            setSubsMap(m)
+          } else {
+            setSubsMap({})
+          }
+        } else {
+          setMyAssignments([])
+          setSubsMap({})
+          setMaterialsMap({})
         }
       } catch (e) {
         console.error('Ошибка загрузки данных ученика:', e)
@@ -173,6 +222,56 @@ export default function Students() {
             emptyText="Прогресс появится после первых уроков"
           />
         </div>
+      </Section>
+
+      <Section title="Мои задания">
+        {myAssignments.length === 0 ? (
+          <div className="rounded-xl border border-gray-100 bg-white p-4 text-sm text-gray-600">Вам пока не назначали ДЗ</div>
+        ) : (
+          <div className="space-y-3">
+            <ul className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-white">
+              {myAssignments.map(a => {
+                const s = subsMap[a.id]
+                const status = !s ? { label: 'не сдано', color: 'bg-gray-50 text-gray-700' } : ((s.grade || '').trim() ? { label: `проверено (${s.grade})`, color: 'bg-green-50 text-green-700' } : { label: 'ожидает проверки', color: 'bg-yellow-50 text-yellow-700' })
+                const material = a.material_id ? materialsMap[a.material_id] : null
+                const downloadMaterial = (m) => {
+                  try {
+                    const path = m?.file_path || m?.storage_path
+                    if (!path) return
+                    const { data } = supabase.storage.from('materials').getPublicUrl(path)
+                    const url = data?.publicUrl
+                    if (!url) return
+                    const aTag = document.createElement('a')
+                    aTag.href = url
+                    aTag.download = (m?.title || (path.split('/').pop()) || 'material')
+                    document.body.appendChild(aTag)
+                    aTag.click()
+                    document.body.removeChild(aTag)
+                  } catch (e) {
+                    console.error('download material failed', e)
+                  }
+                }
+                return (
+                  <li key={a.id} className="flex items-center justify-between py-3 px-4">
+                    <div>
+                      <div className="font-medium">{a.title}</div>
+                      <div className="text-sm text-gray-500">Дедлайн: {a.due_date ? new Date(a.due_date).toLocaleString() : '—'}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {material && (
+                        <button className="btn-outline" onClick={() => downloadMaterial(material)}>Скачать материал</button>
+                      )}
+                      <span className={`rounded-xl px-3 py-1 text-sm ${status.color}`}>{status.label}</span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+            <div className="flex justify-end">
+              <a href="/assignments/student" className="btn-outline">Все задания</a>
+            </div>
+          </div>
+        )}
       </Section>
     </div>
   )

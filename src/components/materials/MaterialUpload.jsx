@@ -71,13 +71,12 @@ export default function MaterialUpload({ onUploaded }) {
         title: title?.trim() || safeName,
         description: description?.trim() || null,
         file_path: path,
+        storage_path: path,
         file_type: file.type || null,
         class_name: className?.trim() || null,
         owner_id: userId,
         visibility: visibility,
       }
-      // fallback: some schemas use storage_path instead of file_path
-      if (!payload.file_path) payload.storage_path = path
 
       const { error: insErr } = await supabase.from('materials').insert(payload)
       if (insErr) throw insErr

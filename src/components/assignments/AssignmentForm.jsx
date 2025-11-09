@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
-export default function AssignmentForm({ onCreated }) {
+export default function AssignmentForm({ onCreated, studentId }) {
   const [materials, setMaterials] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -38,11 +38,23 @@ export default function AssignmentForm({ onCreated }) {
         teacher_id,
         material_id: form.material_id || null,
       }
-      const { error } = await supabase.from('assignments').insert(payload)
+      const { data: inserted, error } = await supabase
+        .from('assignments')
+        .insert(payload)
+        .select('id, title, description, due_date, teacher_id, material_id')
+        .single()
       if (error) throw error
+
+      // Если компонент используется на странице урока и передан studentId — сразу назначаем
+      if (studentId && inserted?.id) {
+        const row = { assignment_id: inserted.id, student_id: studentId }
+        const { error: upErr } = await supabase.from('assignment_targets').upsert([row], { onConflict: 'assignment_id,student_id' })
+        if (upErr) throw upErr
+      }
+
       setToast({ type: 'success', msg: 'Задание создано' })
       setForm({ title: '', description: '', due_date: '', material_id: '' })
-      onCreated?.()
+      onCreated?.(inserted)
     } catch (e) {
       setToast({ type: 'error', msg: e?.message || 'Не удалось создать задание' })
     } finally {

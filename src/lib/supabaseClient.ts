@@ -10,3 +10,6 @@ export let supabase: SupabaseClient | null = null
 if (isSupabaseConfigured) {
   supabase = createClient(supabaseUrl, supabaseAnonKey)
 }
+
+// Expose supabase globally in dev tools for local development
+if (import.meta.env.DEV) window.supabase = supabase as any

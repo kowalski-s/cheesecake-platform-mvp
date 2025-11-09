@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
+import AssignmentTargetsModal from './AssignmentTargetsModal'
 
 export default function AssignmentsList({ mode = 'teacher', onSelectAssignment }) {
   const { role } = useAuth()
@@ -11,6 +12,8 @@ export default function AssignmentsList({ mode = 'teacher', onSelectAssignment }
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [assigning, setAssigning] = useState(null)
+  const [toast, setToast] = useState(null)
 
   // For teacher, also load students to compute not-submitted count
   const [students, setStudents] = useState([])
@@ -88,6 +91,9 @@ export default function AssignmentsList({ mode = 'teacher', onSelectAssignment }
                     не сдано: {statsMap[a.id].notSubmitted} • ожид.: {statsMap[a.id].awaiting} • проверено: {statsMap[a.id].reviewed}
                   </div>
                 )}
+                {mode === 'teacher' && (
+                  <button className="btn-outline" onClick={() => setAssigning(a)}>Назначить</button>
+                )}
                 <button className="btn-outline" onClick={() => onSelectAssignment?.(a)}>Открыть</button>
               </div>
             </div>
@@ -97,6 +103,15 @@ export default function AssignmentsList({ mode = 'teacher', onSelectAssignment }
           <li className="py-8 text-center text-gray-500">Нет заданий</li>
         )}
       </ul>
+      <AssignmentTargetsModal
+        visible={!!assigning}
+        assignment={assigning}
+        onClose={() => setAssigning(null)}
+        onAssigned={() => setToast({ type: 'success', msg: 'Задание назначено' })}
+      />
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast?.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast?.msg}</div>
+      )}
     </section>
   )
 }

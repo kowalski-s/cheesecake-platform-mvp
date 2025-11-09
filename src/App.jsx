@@ -21,6 +21,7 @@ import SchedulePage from "./pages/Schedule";
 import MaterialsPage from "./pages/Materials";
 import AssignmentsTeacherPage from "./pages/AssignmentsTeacher";
 import AssignmentsStudentPage from "./pages/AssignmentsStudent";
+import LessonPage from "./pages/Lesson";
 import AdminUsersPage from "./pages/AdminUsers";
 import AdminTeachersPage from "./pages/AdminTeachers";
 import AdminStudentsPage from "./pages/AdminStudents";
@@ -72,6 +73,14 @@ function App() {
             ) : (
               <Routes>
                 <Route path="/" element={<HomePage />} />
+                <Route
+                  path="/lesson/:id"
+                  element={
+                    <ProtectedRoute>
+                      <LessonPage />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/teacher"
                   element={

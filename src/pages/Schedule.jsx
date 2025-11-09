@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { format } from 'date-fns'
 import Loading from '../components/ui/Loading'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function SchedulePage() {
@@ -19,6 +20,7 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [toast, setToast] = useState(null)
+  const [tMap, setTMap] = useState({})
   const withTimeout = (p, ms = 8000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export default function SchedulePage() {
       const f = override ?? filters
       let query = supabase
         .from('lessons')
-        .select('id, title, start_at, status, teacher:teachers(display_name), class_name, student:students(display_name)', { count: 'exact' })
+        .select('id, title, start_at, status, teacher_id, teacher:teachers(display_name), class_name, student:students(display_name)', { count: 'exact' })
         .order('start_at', { ascending: true })
       if (f.teacher) query = query.eq('teacher_id', f.teacher)
       if (f.className) query = query.ilike('class_name', `%${f.className}%`)
@@ -59,6 +61,19 @@ export default function SchedulePage() {
       if (error) throw error
       setLessons(data || [])
       setTotal(count || 0)
+
+      // Доп. шаг: загрузка имён преподавателей одной пачкой и формирование карты id -> display_name
+      const ids = [...new Set((data || []).map(l => l?.teacher_id).filter(Boolean))]
+      if (ids.length > 0) {
+        const { data: tlist } = await withTimeout(
+          supabase.from('teachers').select('id, display_name').in('id', ids),
+          8000
+        )
+        const map = Object.fromEntries((tlist || []).map(t => [t.id, t.display_name]))
+        setTMap(map)
+      } else {
+        setTMap({})
+      }
     } catch (err) {
       console.error('Ошибка загрузки занятий:', err)
       const msg = err?.message || 'Не удалось загрузить расписание'
@@ -201,10 +216,10 @@ export default function SchedulePage() {
             <ul className="divide-y divide-gray-100">
               {lessons.map(l => (
                 <li key={l.id} className="flex items-center justify-between py-3">
-                  <div>
-                    <div className="font-medium">{l.title} <span className="text-gray-400">({l.class_name})</span></div>
-                    <div className="text-sm text-gray-500">{format(new Date(l.start_at), 'dd.MM.yyyy HH:mm')} • {l.teacher?.display_name} • {l.student?.display_name}</div>
-                  </div>
+                  <Link to={`/lesson/${l.id}`} className="group">
+                    <div className="font-medium group-hover:text-orange-600">{l.title} <span className="text-gray-400">({l.class_name})</span></div>
+                    <div className="text-sm text-gray-500">{format(new Date(l.start_at), 'dd.MM.yyyy HH:mm')} • {tMap[l.teacher_id] ?? l.teacher?.display_name ?? '—'} • {l.student?.display_name}</div>
+                  </Link>
                   {canEdit ? (
                     <select className="input w-36" value={l.status} onChange={(e) => setStatus(l.id, e.target.value)}>
                       <option value="planned">Запланировано</option>
