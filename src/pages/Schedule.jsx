@@ -20,7 +20,7 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [toast, setToast] = useState(null)
-  const [tMap, setTMap] = useState({})
+  const [teacherMap, setTeacherMap] = useState({})
   const withTimeout = (p, ms = 8000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
 
   useEffect(() => {
@@ -70,9 +70,9 @@ export default function SchedulePage() {
           8000
         )
         const map = Object.fromEntries((tlist || []).map(t => [t.id, t.display_name]))
-        setTMap(map)
+        setTeacherMap(map)
       } else {
-        setTMap({})
+        setTeacherMap({})
       }
     } catch (err) {
       console.error('Ошибка загрузки занятий:', err)
@@ -218,7 +218,7 @@ export default function SchedulePage() {
                 <li key={l.id} className="flex items-center justify-between py-3">
                   <Link to={`/lesson/${l.id}`} className="group">
                     <div className="font-medium group-hover:text-orange-600">{l.title} <span className="text-gray-400">({l.class_name})</span></div>
-                    <div className="text-sm text-gray-500">{format(new Date(l.start_at), 'dd.MM.yyyy HH:mm')} • {tMap[l.teacher_id] ?? l.teacher?.display_name ?? '—'} • {l.student?.display_name}</div>
+                    <div className="text-sm text-gray-500">{format(new Date(l.start_at), 'dd.MM.yyyy HH:mm')} • {teacherMap[l.teacher_id] ?? '—'} • {l.student?.display_name}</div>
                   </Link>
                   {canEdit ? (
                     <select className="input w-36" value={l.status} onChange={(e) => setStatus(l.id, e.target.value)}>

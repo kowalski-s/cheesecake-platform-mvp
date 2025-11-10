@@ -82,7 +82,7 @@ export default function MaterialUpload({ onUploaded }) {
       if (insErr) throw insErr
       setToast({ type: 'success', msg: 'Материал загружен' })
       setFile(null); setTitle(''); setDescription(''); setClassName(''); setVisibility('public')
-      onUploaded?.()
+      if (typeof onUploaded === 'function') onUploaded()
     } catch (err) {
       console.error('upload material failed', err)
       setToast({ type: 'error', msg: err?.message || 'Не удалось загрузить материал' })

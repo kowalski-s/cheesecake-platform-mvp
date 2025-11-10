@@ -34,8 +34,8 @@ export default function InviteUserModal({ isOpen, onClose, defaultRole = "teache
     try {
       const res = await inviteUser({ email, display_name: name, role })
       if (res.ok) {
-        onClose?.()
-        onSuccess?.(res.data?.user || null)
+      if (typeof onClose === 'function') onClose()
+      if (typeof onSuccess === 'function') onSuccess(res.data?.user || null)
       } else {
         if (res.status === 400) setError("Введите корректный email")
         else if (res.status === 409) setError("Такой пользователь уже существует или уже приглашён")

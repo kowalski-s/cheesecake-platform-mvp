@@ -61,9 +61,9 @@ export default function CreateAndAssignModal({ visible, onClose, teacherId, stud
       }
 
       setToast({ type: 'success', msg: 'Задание создано' })
-      onCreated?.(inserted)
+      if (typeof onCreated === 'function') onCreated(inserted)
       setTimeout(() => setToast(null), 2000)
-      onClose?.()
+      if (typeof onClose === 'function') onClose()
     } catch (e) {
       setToast({ type: 'error', msg: e?.message || 'Не удалось создать' })
       setTimeout(() => setToast(null), 2500)

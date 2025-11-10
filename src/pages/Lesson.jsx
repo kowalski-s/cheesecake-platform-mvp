@@ -39,8 +39,8 @@ function SelectAssignmentModal({ visible, onClose, onAssigned, teacherId, studen
       if (upErr) throw upErr
       setToast({ type: 'success', msg: 'Задание назначено' })
       setTimeout(() => setToast(null), 2000)
-      onAssigned?.({ assignment_id: selectedId, student_id: studentId })
-      onClose?.()
+      if (typeof onAssigned === 'function') onAssigned({ assignment_id: selectedId, student_id: studentId })
+      if (typeof onClose === 'function') onClose()
     } catch (e) {
       setToast({ type: 'error', msg: e?.message || 'Не удалось назначить' })
       setTimeout(() => setToast(null), 2500)

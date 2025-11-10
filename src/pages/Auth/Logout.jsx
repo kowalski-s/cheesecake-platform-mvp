@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext'
 
 export default function Logout() {
   const nav = useNavigate()
-  const { setRole, setUser } = (useAuth?.() ?? {})
+  const { setRole, setUser } = useAuth() ?? {}
 
   useEffect(() => {
     ;(async () => {
@@ -14,7 +14,8 @@ export default function Logout() {
       } catch (e) {
         console.error('logout failed', e)
       } finally {
-        setRole?.(null); setUser?.(null)
+        if (typeof setRole === 'function') setRole(null)
+        if (typeof setUser === 'function') setUser(null)
         nav('/login', { replace: true })
       }
     })()

@@ -42,8 +42,8 @@ export default function AssignmentTargetsModal({ visible, assignment, onClose, o
       if (upErr) throw upErr
       setToast({ type: 'success', msg: 'Назначено' })
       setTimeout(() => setToast(null), 2000)
-      onAssigned?.(rows)
-      onClose?.()
+      if (typeof onAssigned === 'function') onAssigned(rows)
+      if (typeof onClose === 'function') onClose()
     } catch (e) {
       setToast({ type: 'error', msg: e?.message || 'Не удалось назначить' })
       setTimeout(() => setToast(null), 2500)

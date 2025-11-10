@@ -54,7 +54,7 @@ export default function AssignmentForm({ onCreated, studentId }) {
 
       setToast({ type: 'success', msg: 'Задание создано' })
       setForm({ title: '', description: '', due_date: '', material_id: '' })
-      onCreated?.(inserted)
+      if (typeof onCreated === 'function') onCreated(inserted)
     } catch (e) {
       setToast({ type: 'error', msg: e?.message || 'Не удалось создать задание' })
     } finally {

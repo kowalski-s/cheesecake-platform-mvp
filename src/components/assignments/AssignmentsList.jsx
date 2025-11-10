@@ -94,7 +94,7 @@ export default function AssignmentsList({ mode = 'teacher', onSelectAssignment }
                 {mode === 'teacher' && (
                   <button className="btn-outline" onClick={() => setAssigning(a)}>Назначить</button>
                 )}
-                <button className="btn-outline" onClick={() => onSelectAssignment?.(a)}>Открыть</button>
+                <button className="btn-outline" onClick={() => { if (typeof onSelectAssignment === 'function') onSelectAssignment(a) }}>Открыть</button>
               </div>
             </div>
           </li>

@@ -2,45 +2,94 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 import Loading from '@/components/ui/Loading'
+import toast from '@/lib/safeToast'
 
 export default function AssignmentsStudentPage() {
   const { role } = useAuth()
   const isStudent = useMemo(() => (role || '').trim().toLowerCase() === 'student', [role])
-  const [items, setItems] = useState([])
-  const [subsMap, setSubsMap] = useState({})
+  const [assignments, setAssignments] = useState([])
+  const [subs, setSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
+  const [banner, setBanner] = useState(null)
   const [fileByAssignment, setFileByAssignment] = useState({})
   const [confirmId, setConfirmId] = useState(null)
   const [materialsMap, setMaterialsMap] = useState({})
   const [myId, setMyId] = useState(null)
 
+  // Глобальный перехватчик ошибок с выводом стека
+  useEffect(() => {
+    const h = (ev) => {
+      console.error('RUNTIME_ERR:', ev?.error ?? ev?.message, ev?.error?.stack)
+    }
+    window.addEventListener('error', h)
+    window.addEventListener('unhandledrejection', h)
+    return () => {
+      window.removeEventListener('error', h)
+      window.removeEventListener('unhandledrejection', h)
+    }
+  }, [])
+
+  // Прямая загрузка myId (student.id по user_id)
+  async function loadStudentId() {
+    try {
+      const { data: userRes, error: e1 } = await supabase.auth.getUser()
+      if (e1) throw e1
+      const uid = userRes?.user?.id
+      if (!uid) throw new Error('Не найден auth.uid')
+
+      const { data: s, error: e2 } = await supabase
+        .from('students')
+        .select('id')
+        .eq('user_id', uid)
+        .maybeSingle()
+      if (e2) throw e2
+
+      setMyId(s?.id ?? null)
+    } catch (e) {
+      console.error('ERR_LOAD_STUDENT', e, e?.stack)
+      if (toast?.error && typeof toast.error === 'function') {
+        toast.error('Не удалось загрузить профиль ученика')
+      }
+    }
+  }
+
+  useEffect(() => { loadStudentId() }, [])
+  useEffect(() => { console.log('myId', myId) }, [myId])
+
+  // Безопасное имя файла
+  const safeName = (name) => (name || '').replace(/[^a-zA-Z0-9._-]/g, '_')
+
+  // Перезагрузка сабмишнов (как ФУНКЦИЯ, вызывается без скобок при передаче в props)
+  const refetchSubmissions = async () => {
+    if (!myId) return
+    const { data: subsData } = await supabase
+      .from('submissions')
+      .select('id, assignment_id, grade, feedback, file_path')
+      .eq('student_id', myId)
+    setSubs(subsData ?? [])
+  }
+
   useEffect(() => {
     const load = async () => {
+      if (!myId) return
       setLoading(true)
       setError(null)
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user?.id) throw new Error('Не найден пользователь')
-        // Мой student.id (через user_id)
-        const { data: my } = await supabase
-          .from('students')
-          .select('id')
-          .eq('user_id', user.id)
-          .maybeSingle()
-        const sid = my?.id || user.id
-        setMyId(sid)
-
         // Список назначенных мне заданий через assignment_targets
         const { data: targets, error: tErr } = await supabase
           .from('assignment_targets')
-          .select('assignment_id, assignments(id, title, description, due_date, material_id, teacher_id)')
-          .eq('student_id', sid)
+          .select(`
+            assignment_id,
+            assignments:assignments!assignment_targets_assignment_id_fkey (
+              id, title, description, due_date, teacher_id, lesson_id, material_id
+            )
+          `)
+          .eq('student_id', myId)
           .order('assignments(due_date)', { ascending: true })
         if (tErr) throw tErr
         const list = (targets || []).map(t => t.assignments).filter(Boolean)
-        setItems(list)
+        setAssignments(list)
 
         // Загрузим метаданные материалов для прикреплённых ДЗ
         const matIds = list.map(a => a.material_id).filter(Boolean)
@@ -58,29 +107,33 @@ export default function AssignmentsStudentPage() {
 
         // Мои сабмишны по этим заданиям
         const ids = list.map(a => a.id).filter(Boolean)
-        let subs = []
+        let subsArr = []
         if (ids.length > 0) {
           const { data: subsData } = await supabase
             .from('submissions')
             .select('id, assignment_id, grade, feedback, file_path')
-            .eq('student_id', sid)
+            .eq('student_id', myId)
             .in('assignment_id', ids)
-          subs = subsData || []
+          subsArr = subsData || []
         }
-        const m = {}
-        subs.forEach(s => { m[s.assignment_id] = s })
-        setSubsMap(m)
+        setSubs(subsArr)
       } catch (e) {
+        console.error('ERR_LOAD_STUDENT', e, e?.stack)
         setError(e?.message || 'Не удалось загрузить задания')
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [])
+  }, [myId])
+
+  const subsMap = useMemo(
+    () => Object.fromEntries((subs ?? []).map(s => [s.assignment_id, s])),
+    [subs]
+  )
 
   const statusFor = (a) => {
-    const s = subsMap[a.id]
+    const s = subsMap?.[a.id]
     if (!s) return { label: 'не сдано', color: 'bg-gray-50 text-gray-700' }
     if ((s.grade || '').trim()) return { label: `проверено (${s.grade})`, color: 'bg-green-50 text-green-700' }
     return { label: 'ожидает проверки', color: 'bg-yellow-50 text-yellow-700' }
@@ -104,39 +157,41 @@ export default function AssignmentsStudentPage() {
     }
   }
 
-  const submitFile = async (assignment) => {
+  async function handleSubmit(assignment) {
     try {
-      const f = fileByAssignment[assignment.id]
-      if (!f) { setToast({ type: 'error', msg: 'Выберите файл' }); return }
+      const file = fileByAssignment[assignment.id]
+      if (!file) { if (typeof toast.error === 'function') toast.error('Выберите файл'); setBanner({ type: 'error', msg: 'Выберите файл' }); return }
+
       const { data: { user } } = await supabase.auth.getUser()
       const uid = user?.id
       const sid = myId || uid
-      const ts = Date.now()
-      const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const path = `private/${sid}/${assignment.id}-${ts}-${safeName}`
-      const { error: upErr } = await supabase.storage.from('submissions').upload(path, f, { cacheControl: '3600', upsert: false })
-      if (upErr) throw upErr
-      // upsert submission
-      const { data: existing } = await supabase.from('submissions').select('id').eq('assignment_id', assignment.id).eq('student_id', sid).limit(1)
-      if (existing && existing.length > 0) {
-        const { error: updErr } = await supabase.from('submissions').update({ file_path: path }).eq('id', existing[0].id)
-        if (updErr) throw updErr
-      } else {
-        const { error: insErr } = await supabase.from('submissions').insert({ assignment_id: assignment.id, student_id: sid, file_path: path })
-        if (insErr) throw insErr
+      const path = `private/${sid}/${assignment.id}-${Date.now()}-${safeName(file.name)}`
+
+      const up = await supabase.storage.from('submissions').upload(path, file, { upsert: true })
+      if (up.error) throw up.error
+
+      const payload = {
+        assignment_id: assignment.id,
+        student_id: sid,
+        file_path: path,
+        updated_at: new Date().toISOString(),
       }
-      setToast({ type: 'success', msg: 'Решение отправлено' })
+      const { error: upsertErr } = await supabase
+        .from('submissions')
+        .upsert(payload, { onConflict: 'assignment_id,student_id' })
+      if (upsertErr) throw upsertErr
+
+      if (typeof toast.success === 'function') toast.success('Работа отправлена')
+      setBanner({ type: 'success', msg: 'Работа отправлена' })
       setConfirmId(null)
       setFileByAssignment(prev => ({ ...prev, [assignment.id]: null }))
-      // refresh
-      const { data: subs } = await supabase.from('submissions').select('id, assignment_id, grade, feedback, file_path').eq('student_id', sid)
-      const m = {}
-      (subs || []).forEach(s => { m[s.assignment_id] = s })
-      setSubsMap(m)
+      if (typeof refetchSubmissions === 'function') await refetchSubmissions()
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Не удалось отправить решение' })
+      console.error('SUBMIT_ERR', e, e?.stack)
+      if (typeof toast.error === 'function') toast.error(typeof e?.message === 'string' ? e.message : 'Не удалось отправить ДЗ')
+      setBanner({ type: 'error', msg: typeof e?.message === 'string' ? e.message : 'Не удалось отправить ДЗ' })
     } finally {
-      setTimeout(() => setToast(null), 2500)
+      setTimeout(() => setBanner(null), 2500)
     }
   }
 
@@ -148,7 +203,7 @@ export default function AssignmentsStudentPage() {
       <section className="card">
         <h2 className="mb-3 text-lg font-semibold">Мои задания</h2>
         <ul className="divide-y divide-gray-100">
-          {items.map(a => {
+          {assignments.map(a => {
             const st = statusFor(a)
             const material = a.material_id ? materialsMap[a.material_id] : null
             return (
@@ -170,7 +225,7 @@ export default function AssignmentsStudentPage() {
               </li>
             )
           })}
-          {items.length === 0 && (
+          {assignments.length === 0 && (
             <li className="py-8 text-center text-gray-500">Нет заданий</li>
           )}
         </ul>
@@ -185,8 +240,8 @@ export default function AssignmentsStudentPage() {
               <div className="flex justify-end gap-2">
                 <button className="btn-outline" onClick={() => setConfirmId(null)}>Отмена</button>
                 <button className="btn-primary" onClick={() => {
-                  const a = items.find(i => i.id === confirmId)
-                  if (a) submitFile(a)
+                  const a = assignments.find(i => i.id === confirmId)
+                  if (a) handleSubmit(a)
                 }}>Отправить</button>
               </div>
             </div>
@@ -194,8 +249,8 @@ export default function AssignmentsStudentPage() {
         </div>
       )}
 
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
+      {banner && (
+        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${banner.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{banner.msg}</div>
       )}
     </div>
   )
