@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { getMyTeacherId } from '@/lib/api'
 
-export default function CreateAndAssignModal({ visible, onClose, teacherId, studentId, onCreated }) {
+export default function CreateAndAssignModal({ visible, onClose, teacherId, studentId, lessonId, onCreated }) {
   const [materials, setMaterials] = useState([])
   const [form, setForm] = useState({ title: '', description: '', due_date: '', material_id: '', assignNow: true })
   const [loading, setLoading] = useState(false)
@@ -37,31 +38,66 @@ export default function CreateAndAssignModal({ visible, onClose, teacherId, stud
       if (!form.title.trim()) { setToast({ type: 'error', msg: 'Введите название' }); return }
       setSubmitting(true)
       setToast(null)
+      const myTeacherId = await getMyTeacherId(supabase)
+      if (!myTeacherId) { setToast({ type: 'error', msg: 'Не найден профиль преподавателя' }); return }
       const payload = {
         title: form.title.trim(),
         description: form.description?.trim() || null,
         due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
-        teacher_id: teacherId,
-        material_id: form.material_id || null,
+        teacher_id: myTeacherId,
+        ...(lessonId ? { lesson_id: lessonId } : {}),
+        material_id: (form.material_id || '').trim() ? form.material_id : null,
       }
-      const { data: inserted, error: insErr } = await supabase
+      const { error: insErr } = await supabase
         .from('assignments')
-        .insert(payload)
-        .select('id, title, description, due_date, teacher_id, material_id')
-        .single()
+        .insert(payload, { returning: 'minimal' })
       if (insErr) throw insErr
 
+      // Отдельный SELECT, чтобы получить id созданного задания (без нарушения RLS)
+      let q = supabase
+        .from('assignments')
+        .select('id')
+        .eq('teacher_id', myTeacherId)
+        .eq('title', payload.title)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (!lessonId) {
+        q = supabase
+          .from('assignments')
+          .select('id')
+          .eq('teacher_id', myTeacherId)
+          .eq('title', payload.title)
+          .is('lesson_id', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      } else {
+        q = supabase
+          .from('assignments')
+          .select('id')
+          .eq('teacher_id', myTeacherId)
+          .eq('title', payload.title)
+          .eq('lesson_id', lessonId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      }
+      const { data: created, error: selErr } = await q
+      if (selErr) throw selErr
+      const assignmentId = created?.id
+
       // Если нужно сразу назначить текущему ученику
-      if (form.assignNow && studentId) {
-        const row = { assignment_id: inserted.id, student_id: studentId }
+      if (form.assignNow && studentId && assignmentId) {
+        const row = { assignment_id: assignmentId, student_id: studentId }
         const { error: upErr } = await supabase
           .from('assignment_targets')
-          .upsert([row], { onConflict: 'assignment_id,student_id' })
+          .insert(row, { returning: 'minimal' })
         if (upErr) throw upErr
       }
 
       setToast({ type: 'success', msg: 'Задание создано' })
-      if (typeof onCreated === 'function') onCreated(inserted)
+      if (typeof onCreated === 'function') onCreated({ id: assignmentId })
       setTimeout(() => setToast(null), 2000)
       if (typeof onClose === 'function') onClose()
     } catch (e) {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { getMyTeacherId } from '@/lib/api'
 
 export default function AssignmentForm({ onCreated, studentId }) {
   const [materials, setMaterials] = useState([])
@@ -29,32 +30,43 @@ export default function AssignmentForm({ onCreated, studentId }) {
     e.preventDefault()
     try {
       if (!form.title.trim()) { setToast({ type: 'error', msg: 'Введите название' }); return }
-      const { data: { user } } = await supabase.auth.getUser()
-      const teacher_id = user?.id
+      const teacher_id = await getMyTeacherId(supabase)
+      if (!teacher_id) { setToast({ type: 'error', msg: 'Не найден профиль преподавателя' }); return }
       const payload = {
         title: form.title.trim(),
         description: form.description?.trim() || null,
         due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
         teacher_id,
-        material_id: form.material_id || null,
+        material_id: (form.material_id || '').trim() ? form.material_id : null,
       }
-      const { data: inserted, error } = await supabase
+      const { error: insErr } = await supabase
         .from('assignments')
-        .insert(payload)
-        .select('id, title, description, due_date, teacher_id, material_id')
-        .single()
-      if (error) throw error
+        .insert(payload, { returning: 'minimal' })
+      if (insErr) throw insErr
+
+      // Получаем assignment_id отдельным разрешённым SELECT
+      const { data: created, error: selErr } = await supabase
+        .from('assignments')
+        .select('id')
+        .eq('teacher_id', teacher_id)
+        .eq('title', payload.title)
+        .is('lesson_id', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (selErr) throw selErr
+      const assignmentId = created?.id
 
       // Если компонент используется на странице урока и передан studentId — сразу назначаем
-      if (studentId && inserted?.id) {
-        const row = { assignment_id: inserted.id, student_id: studentId }
-        const { error: upErr } = await supabase.from('assignment_targets').upsert([row], { onConflict: 'assignment_id,student_id' })
+      if (studentId && assignmentId) {
+        const row = { assignment_id: assignmentId, student_id: studentId }
+        const { error: upErr } = await supabase.from('assignment_targets').insert(row, { returning: 'minimal' })
         if (upErr) throw upErr
       }
 
       setToast({ type: 'success', msg: 'Задание создано' })
       setForm({ title: '', description: '', due_date: '', material_id: '' })
-      if (typeof onCreated === 'function') onCreated(inserted)
+      if (typeof onCreated === 'function') onCreated({ id: assignmentId })
     } catch (e) {
       setToast({ type: 'error', msg: e?.message || 'Не удалось создать задание' })
     } finally {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { getMyStudentId } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import Loading from '@/components/ui/Loading'
 import toast from '@/lib/safeToast'
@@ -30,32 +31,83 @@ export default function AssignmentsStudentPage() {
     }
   }, [])
 
-  // Прямая загрузка myId (student.id по user_id)
-  async function loadStudentId() {
-    try {
-      const { data: userRes, error: e1 } = await supabase.auth.getUser()
-      if (e1) throw e1
-      const uid = userRes?.user?.id
-      if (!uid) throw new Error('Не найден auth.uid')
+  // Единая утилита получения myStudentId и последующая загрузка заданий
+  useEffect(() => {
+    const run = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const myStudentId = await getMyStudentId(supabase)
+        setMyId(myStudentId)
+        if (!myStudentId) {
+          setAssignments([])
+          setSubs([])
+          setMaterialsMap({})
+          return
+        }
 
-      const { data: s, error: e2 } = await supabase
-        .from('students')
-        .select('id')
-        .eq('user_id', uid)
-        .maybeSingle()
-      if (e2) throw e2
+        // Nested select с алиасом 'assignment' и сортировкой по foreignTable
+        const baseSelect = `
+          assignment:assignments (
+            id,
+            title,
+            description,
+            due_date,
+            created_at,
+            lesson_id
+          )
+        `
 
-      setMyId(s?.id ?? null)
-    } catch (e) {
-      console.error('ERR_LOAD_STUDENT', e, e?.stack)
-      if (toast?.error && typeof toast.error === 'function') {
-        toast.error('Не удалось загрузить профиль ученика')
+        let q = supabase
+          .from('assignment_targets')
+          .select(baseSelect)
+          .eq('student_id', myStudentId)
+
+        q = q
+          .order('due_date', { foreignTable: 'assignment', ascending: true })
+          .order('created_at', { foreignTable: 'assignment', ascending: false })
+
+        const { data, error } = await q
+        if (error) {
+          console.error('ERR_LOAD_STUDENT_ASSIGNMENTS', error)
+          setAssignments([])
+          return
+        }
+
+        const normalized = (data ?? [])
+          .map(row => row.assignment)
+          .filter(Boolean)
+
+        setAssignments(normalized)
+
+        // Подгружаем статусы submissions пакетно
+        const assignmentIds = normalized.map(a => a.id)
+        if (assignmentIds.length) {
+          const { data: subs, error: subsErr } = await supabase
+            .from('submissions')
+            .select('assignment_id, student_id, grade, feedback, created_at')
+            .in('assignment_id', assignmentIds)
+            .eq('student_id', myStudentId)
+          if (subsErr) {
+            console.error('ERR_LOAD_SUBMISSIONS', subsErr)
+          }
+          const byAssign = new Map()
+          ;(subs ?? []).forEach(s => byAssign.set(s.assignment_id, s))
+          const withStatus = normalized.map(a => ({
+            ...a,
+            submission: byAssign.get(a.id) || null,
+          }))
+          setAssignments(withStatus)
+        }
+      } catch (e) {
+        console.error('ERR_LOAD_STUDENT_ID', e, e?.stack)
+        setAssignments([])
+      } finally {
+        setLoading(false)
       }
     }
-  }
-
-  useEffect(() => { loadStudentId() }, [])
-  useEffect(() => { console.log('myId', myId) }, [myId])
+    run()
+  }, [])
 
   // Безопасное имя файла
   const safeName = (name) => (name || '').replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -127,15 +179,12 @@ export default function AssignmentsStudentPage() {
     load()
   }, [myId])
 
-  const subsMap = useMemo(
-    () => Object.fromEntries((subs ?? []).map(s => [s.assignment_id, s])),
-    [subs]
-  )
-
+  // Определение статуса на основе встроенного в assignment submission
   const statusFor = (a) => {
-    const s = subsMap?.[a.id]
+    const s = a?.submission || null
     if (!s) return { label: 'не сдано', color: 'bg-gray-50 text-gray-700' }
-    if ((s.grade || '').trim()) return { label: `проверено (${s.grade})`, color: 'bg-green-50 text-green-700' }
+    const hasGrade = s.grade !== null && s.grade !== undefined && String(s.grade).trim() !== ''
+    if (hasGrade) return { label: `проверено (оценка: ${s.grade})`, color: 'bg-green-50 text-green-700' }
     return { label: 'ожидает проверки', color: 'bg-yellow-50 text-yellow-700' }
   }
 
@@ -185,7 +234,20 @@ export default function AssignmentsStudentPage() {
       setBanner({ type: 'success', msg: 'Работа отправлена' })
       setConfirmId(null)
       setFileByAssignment(prev => ({ ...prev, [assignment.id]: null }))
-      if (typeof refetchSubmissions === 'function') await refetchSubmissions()
+      // После отправки — обновляем статус submission для задания
+      try {
+        const { data: subsData, error: subsErr } = await supabase
+          .from('submissions')
+          .select('assignment_id, student_id, grade, feedback, created_at')
+          .eq('student_id', myId)
+          .eq('assignment_id', assignment.id)
+        if (!subsErr) {
+          const s = (subsData || [])[0] || null
+          setAssignments(prev => prev.map(a => a.id === assignment.id ? { ...a, submission: s } : a))
+        }
+      } catch (e2) {
+        console.error('ERR_LOAD_SUBMISSIONS', e2)
+      }
     } catch (e) {
       console.error('SUBMIT_ERR', e, e?.stack)
       if (typeof toast.error === 'function') toast.error(typeof e?.message === 'string' ? e.message : 'Не удалось отправить ДЗ')
@@ -197,6 +259,7 @@ export default function AssignmentsStudentPage() {
 
   if (!isStudent) return <div className="card p-6 text-center">Доступ запрещён</div>
   if (loading) return <Loading message="Загрузка заданий..." />
+  if (myId === null) return <div className="card p-6 text-center">Нет профиля студента</div>
 
   return (
     <div className="space-y-6">
@@ -205,13 +268,14 @@ export default function AssignmentsStudentPage() {
         <ul className="divide-y divide-gray-100">
           {assignments.map(a => {
             const st = statusFor(a)
-            const material = a.material_id ? materialsMap[a.material_id] : null
+            const material = a?.material_id ? materialsMap[a.material_id] : null
             return (
               <li key={a.id} className="py-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium">{a.title}</div>
-                    <div className="text-sm text-gray-500">Дедлайн: {a.due_date ? new Date(a.due_date).toLocaleString() : '—'}</div>
+                    <div className="font-medium">{a.title ?? '—'}</div>
+                    <div className="text-sm text-gray-500">{(a.description ?? '').trim() ? a.description : '—'}</div>
+                    <div className="text-sm text-gray-500">Срок: {a.due_date ? new Date(a.due_date).toLocaleString() : 'без срока'}</div>
                   </div>
                   <span className={`rounded-xl px-3 py-1 text-sm ${st.color}`}>{st.label}</span>
                 </div>
@@ -226,7 +290,7 @@ export default function AssignmentsStudentPage() {
             )
           })}
           {assignments.length === 0 && (
-            <li className="py-8 text-center text-gray-500">Нет заданий</li>
+            <li className="py-8 text-center text-gray-500">Пока заданий нет</li>
           )}
         </ul>
       </section>

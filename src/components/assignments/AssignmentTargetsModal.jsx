@@ -38,7 +38,7 @@ export default function AssignmentTargetsModal({ visible, assignment, onClose, o
       const ids = Object.entries(selected).filter(([, v]) => v).map(([k]) => k)
       if (!assignment?.id || ids.length === 0) { setToast({ type: 'error', msg: 'Выберите хотя бы одного ученика' }); return }
       const rows = ids.map(sid => ({ assignment_id: assignment.id, student_id: sid }))
-      const { error: upErr } = await supabase.from('assignment_targets').upsert(rows, { onConflict: 'assignment_id,student_id' })
+      const { error: upErr } = await supabase.from('assignment_targets').upsert(rows, { onConflict: 'assignment_id,student_id', returning: 'minimal' })
       if (upErr) throw upErr
       setToast({ type: 'success', msg: 'Назначено' })
       setTimeout(() => setToast(null), 2000)
