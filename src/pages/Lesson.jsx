@@ -119,7 +119,7 @@ export default function LessonPage() {
   const [showOnlyPending, setShowOnlyPending] = useState(true)
   const [modalItem, setModalItem] = useState(null)
 
-  const HOMEWORK_BUCKET = 'homework-submissions'
+  const HOMEWORK_BUCKET = 'submissions'
 
   useEffect(() => {
     const load = async () => {
@@ -255,11 +255,11 @@ export default function LessonPage() {
       let fileUrl = null
       if (file) {
         const safeName = (name) => (name || '').replace(/[^a-zA-Z0-9._-]/g, '_')
-        const path = `private/${lesson.student_id}/${a.id}-${Date.now()}-${safeName(file.name)}`
+        const path = `${lesson.student_id}/${a.id}-${Date.now()}-${safeName(file.name)}`
         const up = await supabase.storage.from(HOMEWORK_BUCKET).upload(path, file, { upsert: true })
         if (up.error) throw up.error
-        const { data: pub } = supabase.storage.from(HOMEWORK_BUCKET).getPublicUrl(path)
-        fileUrl = pub?.publicUrl || path
+        const { data } = supabase.storage.from(HOMEWORK_BUCKET).getPublicUrl(path)
+        fileUrl = data?.publicUrl || null
       }
       const { error } = await submitHomework(supabase, { assignmentId: a.id, studentId: lesson.student_id, fileUrl, comment })
       if (error) throw error

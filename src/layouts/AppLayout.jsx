@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabaseClient";
+import { getMyTeacherId } from "../lib/api";
 
 export default function AppLayout({ children, mobileSidebarOpen = false, onCloseSidebar = () => {} }) {
   const { role: ctxRole, profile } = useAuth();
@@ -13,6 +15,7 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
   const navigate = useNavigate();
   const [toastMsg, setToastMsg] = useState(null);
   const [toastType, setToastType] = useState('info');
+  const [pendingCount, setPendingCount] = useState(0);
 
   // Manage focus and close on Escape when off-canvas open
   useEffect(() => {
@@ -81,6 +84,30 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
     return () => clearTimeout(t);
   }, [toastMsg]);
 
+  // Pending homeworks counter for teachers
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const isTeacher = ["teacher", "admin"].includes((role || "").trim().toLowerCase());
+        if (!isTeacher) return;
+        const tid = await getMyTeacherId(supabase);
+        if (!tid) return;
+        const { count } = await supabase
+          .from('v_teacher_pending_submissions')
+          .select('*', { count: 'exact', head: true });
+        if (alive) setPendingCount(count ?? 0);
+      } catch {}
+    };
+    load();
+    const h = (e) => {
+      const delta = (e?.detail?.countDelta ?? 0);
+      if (delta !== 0) setPendingCount(prev => Math.max(0, prev + delta));
+    };
+    window.addEventListener('pendingHomeworksUpdated', h);
+    return () => { alive = false; window.removeEventListener('pendingHomeworksUpdated', h); };
+  }, [role]);
+
   const SidebarContent = (
     <aside className="w-60 shrink-0 border-r border-slate-200/60 bg-white dark:border-slate-800/60 dark:bg-slate-900 md:flex md:flex-col md:min-h-screen md:overflow-y-auto" aria-label="Сайдбар">
       <div className="flex flex-col h-full">
@@ -106,6 +133,20 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
           >
             Расписание
           </NavLink>
+          {(["teacher", "admin"].includes((role || "").trim().toLowerCase())) && (
+            <NavLink
+              to="/teacher/homeworks"
+              className={({ isActive }) =>
+                `rounded-lg px-3 py-2 transition flex items-center justify-between ${isActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`
+              }
+              aria-current={({ isActive }) => (isActive ? "page" : undefined)}
+            >
+              <span>Проверка ДЗ</span>
+              {pendingCount > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-xs px-2 py-0.5">{pendingCount}</span>
+              )}
+            </NavLink>
+          )}
           <NavLink
             to="/materials"
             className={({ isActive }) =>

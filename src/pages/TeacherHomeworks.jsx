@@ -91,7 +91,7 @@ export function GradeModal({ visible, item, studentName, onClose, onSaved }) {
             )}
             <div className="space-y-2">
               <div className="text-sm text-gray-500">Ответ ученика</div>
-              <div className="text-base text-gray-800 whitespace-pre-wrap">{item.comment || '—'}</div>
+              <div className="answer-text text-base text-gray-800">{item.comment || '—'}</div>
               {item.file_url ? (
                 <div>
                   <a className="text-orange-600" href={item.file_url} target="_blank" rel="noreferrer">Открыть файл</a>
@@ -120,7 +120,9 @@ export function GradeModal({ visible, item, studentName, onClose, onSaved }) {
 export default function TeacherHomeworksPage() {
   const { role } = useAuth()
   const isTeacher = useMemo(() => ['teacher', 'admin'].includes((role || '').trim().toLowerCase()), [role])
-  const [items, setItems] = useState([])
+  const [tab, setTab] = useState('pending')
+  const [items, setItems] = useState([]) // pending
+  const [reviewed, setReviewed] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modalItem, setModalItem] = useState(null)
@@ -128,10 +130,7 @@ export default function TeacherHomeworksPage() {
   const [studentMap, setStudentMap] = useState({})
 
   useEffect(() => {
-    const load = async () => {
-      if (!isTeacher) { setLoading(false); return }
-      setLoading(true)
-      setError(null)
+    const loadPending = async () => {
       try {
         const teacherId = await getMyTeacherId(supabase)
         if (!teacherId) { setItems([]); setCount(0); return }
@@ -148,20 +147,81 @@ export default function TeacherHomeworksPage() {
             .from('students')
             .select('id, display_name')
             .in('id', sids)
-          setStudentMap(Object.fromEntries((studs || []).map(s => [s.id, s.display_name])))
-        } else {
-          setStudentMap({})
+          setStudentMap(prev => ({ ...prev, ...Object.fromEntries((studs || []).map(s => [s.id, s.display_name])) }))
         }
       } catch (e) {
-        console.error('ERR_LOAD_TEACHER_HOMEWORKS', e)
+        console.error('ERR_LOAD_PENDING_HOMEWORKS', e)
         setError(e?.message || 'Не удалось загрузить непроверенные работы')
         setItems([])
         setCount(0)
-      } finally {
-        setLoading(false)
       }
     }
-    load()
+    const loadReviewed = async () => {
+      try {
+        const teacherId = await getMyTeacherId(supabase)
+        if (!teacherId) { setReviewed([]); return }
+        const { data: lessons } = await supabase
+          .from('lessons')
+          .select('id')
+          .eq('teacher_id', teacherId)
+        const lessonIds = (lessons || []).map(l => l.id)
+        if (!lessonIds.length) { setReviewed([]); return }
+        const { data: assigns } = await supabase
+          .from('assignments')
+          .select('id, title, lesson_id')
+          .in('lesson_id', lessonIds)
+        const aIds = (assigns || []).map(a => a.id)
+        const titleByA = Object.fromEntries((assigns || []).map(a => [a.id, a.title]))
+        if (!aIds.length) { setReviewed([]); return }
+        const { data: subs } = await supabase
+          .from('submissions')
+          .select('assignment_id, student_id, grade, feedback, checked_at, created_at, file_url')
+          .in('assignment_id', aIds)
+          .not('grade', 'is', null)
+          .order('checked_at', { ascending: false })
+          .limit(20)
+        const sids = [...new Set((subs || []).map(s => s.student_id).filter(Boolean))]
+        let sMap = {}
+        if (sids.length) {
+          const { data: studs } = await supabase
+            .from('students')
+            .select('id, display_name')
+            .in('id', sids)
+          sMap = Object.fromEntries((studs || []).map(s => [s.id, s.display_name]))
+        }
+        const items = (subs || []).map(s => ({
+          assignment_id: s.assignment_id,
+          assignment_title: titleByA[s.assignment_id] || s.assignment_id,
+          student_id: s.student_id,
+          student_name: sMap[s.student_id] || s.student_id,
+          grade: s.grade,
+          feedback: s.feedback,
+          checked_at: s.checked_at,
+          file_url: s.file_url,
+        }))
+        setReviewed(items)
+        setStudentMap(prev => ({ ...prev, ...sMap }))
+      } catch (e) {
+        console.error('ERR_LOAD_REVIEWED_HOMEWORKS', e)
+      }
+    }
+    const boot = async () => {
+      if (!isTeacher) { setLoading(false); return }
+      setLoading(true)
+      setError(null)
+      await Promise.all([loadPending(), loadReviewed()])
+      setLoading(false)
+    }
+    boot()
+    const h = (e) => {
+      const delta = (e?.detail?.countDelta ?? 0)
+      if (delta !== 0) {
+        loadPending();
+        loadReviewed();
+      }
+    }
+    window.addEventListener('pendingHomeworksUpdated', h)
+    return () => window.removeEventListener('pendingHomeworksUpdated', h)
   }, [isTeacher])
 
   const onSaved = (savedItem) => {
@@ -171,36 +231,65 @@ export default function TeacherHomeworksPage() {
   }
 
   if (!isTeacher) return <div className="card p-6 text-center">Доступ запрещён</div>
-  if (loading) return <Loading message="Загрузка непроверенных работ..." />
+  if (loading) return <Loading message="Загрузка работ..." />
 
   return (
     <div className="space-y-6">
       <section className="card">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Непроверенные работы</h2>
-          <div className="rounded-xl bg-brand/10 px-3 py-1 text-sm text-brand">Всего: {count}</div>
+          <h2 className="text-lg font-semibold">Мои домашние задания</h2>
+          <div className="inline-flex items-center rounded-xl bg-gray-50 px-2 py-1 text-sm text-gray-700 gap-2">
+            <button className={`rounded-lg px-2 py-1 ${tab === 'pending' ? 'bg-brand text-white' : 'bg-white border'}`} onClick={() => setTab('pending')}>Непроверенные</button>
+            <button className={`rounded-lg px-2 py-1 ${tab === 'reviewed' ? 'bg-brand text-white' : 'bg-white border'}`} onClick={() => setTab('reviewed')}>Проверенные</button>
+          </div>
         </div>
-        {error ? (
-          <div className="mt-3 text-sm text-red-600">{error}</div>
+        {tab === 'pending' ? (
+          error ? (
+            <div className="mt-3 text-sm text-red-600">{error}</div>
+          ) : (
+            <>
+              <div className="mt-2 rounded-xl bg-brand/10 px-3 py-1 text-sm text-brand">Всего: {count}</div>
+              <ul className="divide-y divide-gray-100 mt-3">
+                {items.map(i => (
+                  <li key={`${i.assignment_id}:${i.student_id}`} className="py-3 flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{i.assignment_title || i.assignment_id}</div>
+                      <div className="text-sm text-gray-600">Студент: {studentMap[i.student_id] || i.student_id}</div>
+                      <div className="text-sm text-gray-600">Сдано: {i.submitted_at ? new Date(i.submitted_at).toLocaleString() : '—'}</div>
+                      <div className="text-sm text-gray-600">Урок: {i.start_at ? new Date(i.start_at).toLocaleString() : i.lesson_id}</div>
+                      <div className="text-xs text-gray-500">{i.comment ? 'Есть комментарий' : 'Комментарий: —'}{i.file_url ? ' • есть файл' : ' • файл: —'}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {i.file_url ? (<a className="btn-outline" href={i.file_url} target="_blank" rel="noreferrer">Открыть файл</a>) : null}
+                      <button className="btn-primary" onClick={() => setModalItem(i)}>Проверить</button>
+                    </div>
+                  </li>
+                ))}
+                {items.length === 0 && (
+                  <li className="py-8 text-center text-gray-500">Нет непроверенных работ</li>
+                )}
+              </ul>
+            </>
+          )
         ) : (
           <ul className="divide-y divide-gray-100 mt-3">
-            {items.map(i => (
-              <li key={`${i.assignment_id}:${i.student_id}`} className="py-3 flex items-center justify-between">
+            {reviewed.map(r => (
+              <li key={`${r.assignment_id}:${r.student_id}`} className="py-3 flex items-center justify-between">
                 <div>
-                  <div className="font-medium">{i.assignment_title || i.assignment_id}</div>
-                  <div className="text-sm text-gray-600">Студент: {studentMap[i.student_id] || i.student_id}</div>
-                  <div className="text-sm text-gray-600">Сдано: {i.submitted_at ? new Date(i.submitted_at).toLocaleString() : '—'}</div>
-                  <div className="text-sm text-gray-600">Урок: {i.start_at ? new Date(i.start_at).toLocaleString() : i.lesson_id}</div>
-                  <div className="text-xs text-gray-500">{i.comment ? 'Есть комментарий' : 'Комментарий: —'}{i.file_url ? ' • есть файл' : ' • файл: —'}</div>
+                  <div className="font-medium">{r.assignment_title || r.assignment_id}</div>
+                  <div className="text-sm text-gray-600">Студент: {r.student_name || r.student_id}</div>
+                  <div className="text-sm text-gray-600">Оценка: {r.grade}</div>
+                  <div className="text-xs text-gray-500">Комментарий: {(r.feedback || '—').slice(0, 140)}</div>
+                  <div className="text-sm text-gray-600">Проверено: {r.checked_at ? new Date(r.checked_at).toLocaleString() : '—'}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {i.file_url ? (<a className="btn-outline" href={i.file_url} target="_blank" rel="noreferrer">Открыть файл</a>) : null}
-                  <button className="btn-primary" onClick={() => setModalItem(i)}>Проверить</button>
+                  {r.file_url ? (<a className="btn-outline" href={r.file_url} target="_blank" rel="noreferrer">Открыть файл</a>) : null}
+                  <button className="btn-outline" onClick={() => setModalItem({ assignment_id: r.assignment_id, student_id: r.student_id, assignment_title: r.assignment_title, file_url: r.file_url, comment: null, submitted_at: null, lesson_id: null, start_at: null, grade: r.grade, feedback: r.feedback })}>Открыть работу</button>
                 </div>
               </li>
             ))}
-            {items.length === 0 && (
-              <li className="py-8 text-center text-gray-500">Нет непроверенных работ</li>
+            {reviewed.length === 0 && (
+              <li className="py-8 text-center text-gray-500">Недавних проверок нет</li>
             )}
           </ul>
         )}

@@ -7,7 +7,7 @@ import toast from '@/lib/safeToast'
 import { getMyStudentId, submitHomework } from '@/lib/api'
 
 const safeText = (v) => (typeof v === 'string' && v.trim().length ? v : '—')
-const HOMEWORK_BUCKET = 'homework-submissions'
+const HOMEWORK_BUCKET = 'submissions'
 const fmtDateTime = (iso) => {
   try { return iso ? new Date(iso).toLocaleString() : '—' } catch { return '—' }
 }
@@ -86,11 +86,11 @@ export default function StudentAssignmentEditor() {
       if (!myStudentId || !assignment?.id) return
       let fileUrl = submission?.file_url || null
       if (file) {
-        const path = `private/${myStudentId}/${assignment.id}-${Date.now()}-${safeName(file.name)}`
+        const path = `${myStudentId}/${assignment.id}-${Date.now()}-${safeName(file.name)}`
         const up = await supabase.storage.from(HOMEWORK_BUCKET).upload(path, file, { upsert: true })
         if (up.error) throw up.error
-        const { data: pub } = supabase.storage.from(HOMEWORK_BUCKET).getPublicUrl(path)
-        fileUrl = pub?.publicUrl || path
+        const { data } = supabase.storage.from(HOMEWORK_BUCKET).getPublicUrl(path)
+        fileUrl = data?.publicUrl || null
       }
       const { error: upErr } = await submitHomework(supabase, {
         assignmentId: assignment.id,

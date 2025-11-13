@@ -104,6 +104,16 @@ function App() {
                   }
                 />
                 <Route
+                  path="/teacher/profile"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["teacher", "admin"]}>
+                        <TeacherProfile />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/schedule"
                   element={
                     <ProtectedRoute>
@@ -220,34 +230,7 @@ function App() {
 }
 
 function Topbar({ onToggleSidebar }) {
-  const { user, role } = useAuth();
-  const isTeacher = ["teacher", "admin"].includes((role || "").trim().toLowerCase());
-  const [pendingCount, setPendingCount] = useState(0);
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        if (!isTeacher) return;
-        const tid = await getMyTeacherId(supabase);
-        if (!tid) return;
-        const { count } = await supabase
-          .from('v_teacher_pending_submissions')
-          .select('*', { count: 'exact', head: true });
-        if (alive) setPendingCount(count ?? 0);
-      } catch (e) {
-        // silent
-      }
-    };
-    load();
-    const h = (e) => {
-      const delta = (e?.detail?.countDelta ?? 0);
-      setPendingCount(prev => Math.max(0, prev + delta));
-    };
-    window.addEventListener('pendingHomeworksUpdated', h);
-    return () => { alive = false; window.removeEventListener('pendingHomeworksUpdated', h); };
-  }, [isTeacher]);
-
+  const { user } = useAuth();
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200/60 dark:bg-slate-900/70 dark:border-slate-800/60">
       <div className="container mx-auto flex items-center justify-between py-3 px-4">
@@ -270,14 +253,6 @@ function Topbar({ onToggleSidebar }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          {isTeacher && (
-            <NavLink to="/teacher/homeworks" className="relative rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100">
-              ДЗ
-              {pendingCount > 0 && (
-                <span className="absolute -top-2 -right-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-xs px-2 py-0.5">{pendingCount}</span>
-              )}
-            </NavLink>
-          )}
           {user ? (
             <UserMenu />
           ) : (

@@ -10,10 +10,10 @@ export default function SubmissionsList({ assignment }) {
   const load = async () => {
     setLoading(true)
     setError(null)
-    try {
+  try {
       const { data, error } = await supabase
         .from('submissions')
-        .select('id, student_id, file_path, grade, feedback, created_at, updated_at')
+        .select('id, student_id, file_url, grade, feedback, created_at, updated_at')
         .eq('assignment_id', assignment?.id)
         .order('created_at', { ascending: false })
       if (error) throw error
@@ -40,13 +40,7 @@ export default function SubmissionsList({ assignment }) {
     }
   }
 
-  const signedUrl = async (path) => {
-    try {
-      const { data, error } = await supabase.storage.from('submissions').createSignedUrl(path, 60 * 10)
-      if (error) return null
-      return data?.signedUrl || null
-    } catch { return null }
-  }
+  // Используем прямой публичный URL из submissions.file_url без генерации подписанных ссылок
 
   return (
     <section className="card">
@@ -62,8 +56,8 @@ export default function SubmissionsList({ assignment }) {
                   <div className="text-sm text-gray-500">Студент: {s.student_id}</div>
                   <div className="text-xs text-gray-400">{s.updated_at ? new Date(s.updated_at).toLocaleString() : s.created_at ? new Date(s.created_at).toLocaleString() : '—'}</div>
                 </div>
-                {s.file_path && (
-                  <AsyncLink path={s.file_path} signedUrlFn={signedUrl} />
+                {s.file_url && (
+                  <a className="btn-outline" href={s.file_url} target="_blank" rel="noreferrer">Открыть файл</a>
                 )}
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -90,9 +84,4 @@ export default function SubmissionsList({ assignment }) {
   )
 }
 
-function AsyncLink({ path, signedUrlFn }) {
-  const [url, setUrl] = useState(null)
-  useEffect(() => { (async () => { setUrl(await signedUrlFn(path)) })() }, [path])
-  if (!url) return <span className="text-xs text-gray-400">Готовим ссылку…</span>
-  return <a className="btn-outline" href={url} target="_blank" rel="noreferrer">Скачать</a>
-}
+// Удалён AsyncLink: открываем file_url напрямую

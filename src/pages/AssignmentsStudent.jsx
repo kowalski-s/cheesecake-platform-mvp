@@ -112,14 +112,14 @@ export default function AssignmentsStudentPage() {
 
   // Безопасное имя файла
 const safeName = (name) => (name || '').replace(/[^a-zA-Z0-9._-]/g, '_')
-const HOMEWORK_BUCKET = 'homework-submissions'
+const HOMEWORK_BUCKET = 'submissions'
 
   // Перезагрузка сабмишнов (как ФУНКЦИЯ, вызывается без скобок при передаче в props)
   const refetchSubmissions = async () => {
     if (!myId) return
     const { data: subsData } = await supabase
       .from('submissions')
-      .select('id, assignment_id, grade, feedback, file_path')
+      .select('id, assignment_id, grade, feedback, file_url, comment, created_at')
       .eq('student_id', myId)
     setSubs(subsData ?? [])
   }
@@ -217,20 +217,18 @@ const HOMEWORK_BUCKET = 'homework-submissions'
       const { data: { user } } = await supabase.auth.getUser()
       const uid = user?.id
       const sid = myId || uid
-      const path = `private/${sid}/${assignment.id}-${Date.now()}-${safeName(file.name)}`
-
+      const path = `${sid}/${assignment.id}-${Date.now()}-${safeName(file.name)}`
       const up = await supabase.storage.from(HOMEWORK_BUCKET).upload(path, file, { upsert: true })
       if (up.error) throw up.error
+      const { data } = supabase.storage.from(HOMEWORK_BUCKET).getPublicUrl(path)
+      const fileUrl = data?.publicUrl || null
 
-      const payload = {
-        assignment_id: assignment.id,
-        student_id: sid,
-        file_path: path,
-        updated_at: new Date().toISOString(),
-      }
-      const { error: upsertErr } = await supabase
-        .from('submissions')
-        .upsert(payload, { onConflict: 'assignment_id,student_id' })
+      const { error: upsertErr } = await submitHomework(supabase, {
+        assignmentId: assignment.id,
+        studentId: sid,
+        fileUrl,
+        comment: null,
+      })
       if (upsertErr) throw upsertErr
 
       if (typeof toast.success === 'function') toast.success('Работа отправлена')
@@ -241,7 +239,7 @@ const HOMEWORK_BUCKET = 'homework-submissions'
       try {
         const { data: subsData, error: subsErr } = await supabase
           .from('submissions')
-          .select('assignment_id, student_id, grade, feedback, created_at')
+          .select('assignment_id, student_id, file_url, comment, grade, feedback, created_at')
           .eq('student_id', myId)
           .eq('assignment_id', assignment.id)
         if (!subsErr) {

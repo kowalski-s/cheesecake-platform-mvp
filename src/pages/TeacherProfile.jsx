@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
+import Loading from "../components/ui/Loading";
 
 export default function TeacherProfile() {
   const { session, role, user } = useAuth();
@@ -10,6 +11,7 @@ export default function TeacherProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [teacherId, setTeacherId] = useState(null);
   const initials = (() => {
     const e = email || session?.user?.email || "";
     return (e.split("@")[0]?.[0] || "?").toUpperCase();
@@ -35,6 +37,7 @@ export default function TeacherProfile() {
           bio: data?.bio || "",
           specialization: data?.specialization || "",
         });
+        setTeacherId(data?.id || null);
         const uid = data?.user_id || userId
         if (uid) {
           const { data: uRow, error: uErr } = await supabase
@@ -81,6 +84,7 @@ export default function TeacherProfile() {
       setSaving(false);
     }
   };
+
 
   return (
     <div className="space-y-6">
@@ -148,6 +152,8 @@ export default function TeacherProfile() {
           </div>
         </div>
       )}
+
+      {/* ДЗ удалены из профиля — остаются только личные данные */}
     </div>
   );
 }
