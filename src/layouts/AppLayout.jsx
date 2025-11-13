@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
-import { getMyTeacherId } from "../lib/api";
+import { getMyTeacherId, getMyStudentId } from "../lib/api";
 
 export default function AppLayout({ children, mobileSidebarOpen = false, onCloseSidebar = () => {} }) {
   const { role: ctxRole, profile } = useAuth();
@@ -16,6 +16,7 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
   const [toastMsg, setToastMsg] = useState(null);
   const [toastType, setToastType] = useState('info');
   const [pendingCount, setPendingCount] = useState(0);
+  const [studentPendingCount, setStudentPendingCount] = useState(0);
 
   // Manage focus and close on Escape when off-canvas open
   useEffect(() => {
@@ -108,6 +109,42 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
     return () => { alive = false; window.removeEventListener('pendingHomeworksUpdated', h); };
   }, [role]);
 
+  // Ungraded homeworks counter for students
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const isStudent = (role || '').trim().toLowerCase() === 'student';
+        if (!isStudent) return;
+        const sid = await getMyStudentId(supabase);
+        if (!sid) { if (alive) setStudentPendingCount(0); return; }
+
+        const { data: targets } = await supabase
+          .from('assignment_targets')
+          .select('assignment_id')
+          .eq('student_id', sid);
+        const aIds = (targets || []).map(t => t.assignment_id).filter(Boolean);
+        if (!aIds.length) { if (alive) setStudentPendingCount(0); return; }
+
+        const { data: subs } = await supabase
+          .from('submissions')
+          .select('assignment_id, grade')
+          .eq('student_id', sid)
+          .in('assignment_id', aIds);
+        const byA = new Map();
+        (subs || []).forEach(s => byA.set(s.assignment_id, s));
+        const ungradedCount = aIds.reduce((acc, id) => {
+          const s = byA.get(id) || null;
+          const hasGrade = s && s.grade !== null && s.grade !== undefined && String(s.grade).trim() !== '';
+          return acc + (hasGrade ? 0 : 1);
+        }, 0);
+        if (alive) setStudentPendingCount(ungradedCount);
+      } catch {}
+    };
+    load();
+    return () => { alive = false; };
+  }, [role]);
+
   const SidebarContent = (
     <aside className="w-60 shrink-0 border-r border-slate-200/60 bg-white dark:border-slate-800/60 dark:bg-slate-900 md:flex md:flex-col md:min-h-screen md:overflow-y-auto" aria-label="Сайдбар">
       <div className="flex flex-col h-full">
@@ -133,6 +170,20 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
           >
             Расписание
           </NavLink>
+          {((role || '').trim().toLowerCase() === 'student') && (
+            <NavLink
+              to="/student/assignments"
+              className={({ isActive }) =>
+                `rounded-lg px-3 py-2 transition flex items-center justify-between ${isActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`
+              }
+              aria-current={({ isActive }) => (isActive ? "page" : undefined)}
+            >
+              <span>Домашние задания</span>
+              {studentPendingCount > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-xs px-2 py-0.5">{studentPendingCount}</span>
+              )}
+            </NavLink>
+          )}
           {(["teacher", "admin"].includes((role || "").trim().toLowerCase())) && (
             <NavLink
               to="/teacher/homeworks"

@@ -197,11 +197,7 @@ export default function Students() {
         </div>
       </Section>
 
-      <Section>
-        <div className="flex justify-end">
-          <a href="/assignments/student" className="btn-outline">Все задания</a>
-        </div>
-      </Section>
+      {/* Удалено: блок с кнопкой "Все задания" */}
     </div>
   )
 }

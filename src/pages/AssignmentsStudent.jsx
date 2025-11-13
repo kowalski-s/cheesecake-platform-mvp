@@ -10,6 +10,7 @@ export default function AssignmentsStudentPage() {
   const { role } = useAuth()
   const isStudent = useMemo(() => (role || '').trim().toLowerCase() === 'student', [role])
   const [assignments, setAssignments] = useState([])
+  const [tab, setTab] = useState('all') // all | unfinished | reviewed
   const [subs, setSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -191,6 +192,27 @@ const HOMEWORK_BUCKET = 'submissions'
     return { label: 'ожидает проверки', color: 'bg-yellow-50 text-yellow-700' }
   }
 
+  // Фильтрация заданий по вкладке
+  const filteredAssignments = useMemo(() => {
+    if (!Array.isArray(assignments)) return []
+    if (tab === 'all') return assignments
+    if (tab === 'unfinished') {
+      return assignments.filter(a => {
+        const s = a?.submission || null
+        const hasGrade = s && s.grade !== null && s.grade !== undefined && String(s.grade).trim() !== ''
+        return !s || !hasGrade
+      })
+    }
+    if (tab === 'reviewed') {
+      return assignments.filter(a => {
+        const s = a?.submission || null
+        const hasGrade = s && s.grade !== null && s.grade !== undefined && String(s.grade).trim() !== ''
+        return !!hasGrade
+      })
+    }
+    return assignments
+  }, [assignments, tab])
+
   const downloadMaterial = (m) => {
     try {
       const path = m?.file_path || m?.storage_path
@@ -265,9 +287,25 @@ const HOMEWORK_BUCKET = 'submissions'
   return (
     <div className="space-y-6">
       <section className="card">
-        <h2 className="mb-3 text-lg font-semibold">Мои задания</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Домашние задания</h2>
+          <div className="flex items-center gap-2">
+            <button
+              className={`rounded-lg px-2 py-1 ${tab === 'all' ? 'bg-brand text-white' : 'bg-white border'}`}
+              onClick={() => setTab('all')}
+            >Все</button>
+            <button
+              className={`rounded-lg px-2 py-1 ${tab === 'unfinished' ? 'bg-brand text-white' : 'bg-white border'}`}
+              onClick={() => setTab('unfinished')}
+            >Невыполненные</button>
+            <button
+              className={`rounded-lg px-2 py-1 ${tab === 'reviewed' ? 'bg-brand text-white' : 'bg-white border'}`}
+              onClick={() => setTab('reviewed')}
+            >Проверенные</button>
+          </div>
+        </div>
         <ul className="divide-y divide-gray-100">
-          {assignments.map(a => {
+          {filteredAssignments.map(a => {
             const st = statusFor(a)
             const material = a?.material_id ? materialsMap[a.material_id] : null
             return (

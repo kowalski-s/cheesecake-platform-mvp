@@ -23,6 +23,7 @@ import AssignmentsTeacherPage from "./pages/AssignmentsTeacher";
 import AssignmentsStudentPage from "./pages/AssignmentsStudent";
 import StudentAssignmentEditor from "./pages/StudentAssignmentEditor";
 import TeacherHomeworksPage from "./pages/TeacherHomeworks";
+import TeacherSchedulePage from "./pages/TeacherSchedule";
 import LessonPage from "./pages/Lesson";
 import AdminUsersPage from "./pages/AdminUsers";
 import AdminTeachersPage from "./pages/AdminTeachers";
@@ -150,7 +151,27 @@ function App() {
                   }
                 />
                 <Route
+                  path="/teacher/schedule"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["teacher", "admin"]}>
+                        <TeacherSchedulePage />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/assignments/student"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["student"]}>
+                        <AssignmentsStudentPage />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/student/assignments"
                   element={
                     <ProtectedRoute>
                       <RoleGuard allow={["student"]}>
