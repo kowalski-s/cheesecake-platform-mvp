@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { NavLink } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
 import { getMyStudentId } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
@@ -85,7 +86,7 @@ export default function AssignmentsStudentPage() {
         if (assignmentIds.length) {
           const { data: subs, error: subsErr } = await supabase
             .from('submissions')
-            .select('assignment_id, student_id, grade, feedback, created_at')
+            .select('assignment_id, student_id, file_url, comment, grade, feedback, created_at')
             .in('assignment_id', assignmentIds)
             .eq('student_id', myStudentId)
           if (subsErr) {
@@ -110,7 +111,8 @@ export default function AssignmentsStudentPage() {
   }, [])
 
   // Безопасное имя файла
-  const safeName = (name) => (name || '').replace(/[^a-zA-Z0-9._-]/g, '_')
+const safeName = (name) => (name || '').replace(/[^a-zA-Z0-9._-]/g, '_')
+const HOMEWORK_BUCKET = 'homework-submissions'
 
   // Перезагрузка сабмишнов (как ФУНКЦИЯ, вызывается без скобок при передаче в props)
   const refetchSubmissions = async () => {
@@ -163,12 +165,13 @@ export default function AssignmentsStudentPage() {
         if (ids.length > 0) {
           const { data: subsData } = await supabase
             .from('submissions')
-            .select('id, assignment_id, grade, feedback, file_path')
+            .select('id, assignment_id, file_url, comment, grade, feedback, created_at')
             .eq('student_id', myId)
             .in('assignment_id', ids)
           subsArr = subsData || []
         }
-        setSubs(subsArr)
+        const byAssign = Object.fromEntries((subsArr || []).map(s => [s.assignment_id, s]))
+        setAssignments(list.map(a => ({ ...a, submission: byAssign[a.id] || null })))
       } catch (e) {
         console.error('ERR_LOAD_STUDENT', e, e?.stack)
         setError(e?.message || 'Не удалось загрузить задания')
@@ -216,7 +219,7 @@ export default function AssignmentsStudentPage() {
       const sid = myId || uid
       const path = `private/${sid}/${assignment.id}-${Date.now()}-${safeName(file.name)}`
 
-      const up = await supabase.storage.from('submissions').upload(path, file, { upsert: true })
+      const up = await supabase.storage.from(HOMEWORK_BUCKET).upload(path, file, { upsert: true })
       if (up.error) throw up.error
 
       const payload = {
@@ -283,8 +286,15 @@ export default function AssignmentsStudentPage() {
                   {material && (
                     <button className="btn-outline" onClick={() => downloadMaterial(material)}>Скачать материал</button>
                   )}
-                  <input type="file" onChange={(e) => setFileByAssignment(prev => ({ ...prev, [a.id]: e.target.files?.[0] || null }))} />
-                  <button className="btn-outline" onClick={() => setConfirmId(a.id)}>Отправить</button>
+                  {!a.submission && (
+                    <NavLink className="btn-outline" to={`/student/assignments/${a.id}`}>Отправить ДЗ</NavLink>
+                  )}
+                  {a.submission && (a.submission.grade == null || String(a.submission.grade).trim() === '') && (
+                    <NavLink className="btn-outline" to={`/student/assignments/${a.id}`}>Редактировать отправку</NavLink>
+                  )}
+                  {a.submission && a.submission.grade != null && String(a.submission.grade).trim() !== '' && (
+                    <NavLink className="btn-outline" to={`/student/assignments/${a.id}`}>Посмотреть комментарий преподавателя</NavLink>
+                  )}
                 </div>
               </li>
             )
@@ -295,23 +305,7 @@ export default function AssignmentsStudentPage() {
         </ul>
       </section>
 
-      {confirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md relative">
-            <div className="p-6 space-y-4">
-              <div className="text-lg font-semibold">Отправить решение?</div>
-              <div className="text-sm text-gray-600">Перед отправкой проверьте, что выбран корректный файл.</div>
-              <div className="flex justify-end gap-2">
-                <button className="btn-outline" onClick={() => setConfirmId(null)}>Отмена</button>
-                <button className="btn-primary" onClick={() => {
-                  const a = assignments.find(i => i.id === confirmId)
-                  if (a) handleSubmit(a)
-                }}>Отправить</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Редактор теперь вынесен на отдельную страницу */}
 
       {banner && (
         <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${banner.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{banner.msg}</div>

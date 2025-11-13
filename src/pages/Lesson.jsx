@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { GradeModal } from './TeacherHomeworks'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 import CreateAndAssignModal from '@/components/assignments/CreateAndAssignModal'
@@ -116,6 +117,9 @@ export default function LessonPage() {
   const [gradeByAssign, setGradeByAssign] = useState({})
   const [feedbackByAssign, setFeedbackByAssign] = useState({})
   const [showOnlyPending, setShowOnlyPending] = useState(true)
+  const [modalItem, setModalItem] = useState(null)
+
+  const HOMEWORK_BUCKET = 'homework-submissions'
 
   useEffect(() => {
     const load = async () => {
@@ -172,7 +176,6 @@ export default function LessonPage() {
           // Для студента — только его сабмишены, для преподавателя — все по уроку
           const isTeacher = normalizedRole === 'teacher' || normalizedRole === 'admin'
           if (!isTeacher) q = q.eq('student_id', l.student_id)
-          if (isTeacher && showOnlyPending) q = q.is('grade', null)
           const { data: subs, error: sErr } = await q
           if (sErr) throw sErr
           const map = {}
@@ -224,7 +227,6 @@ export default function LessonPage() {
           .in('assignment_id', ids)
         const isTeacher = normalizedRole === 'teacher' || normalizedRole === 'admin'
         if (!isTeacher) q = q.eq('student_id', lesson.student_id)
-        if (isTeacher && showOnlyPending) q = q.is('grade', null)
         const { data: subs } = await q
         const map = {}
         ;(subs || []).forEach(s => { if (!(s.assignment_id in map)) map[s.assignment_id] = s })
@@ -254,9 +256,9 @@ export default function LessonPage() {
       if (file) {
         const safeName = (name) => (name || '').replace(/[^a-zA-Z0-9._-]/g, '_')
         const path = `private/${lesson.student_id}/${a.id}-${Date.now()}-${safeName(file.name)}`
-        const up = await supabase.storage.from('submissions').upload(path, file, { upsert: true })
+        const up = await supabase.storage.from(HOMEWORK_BUCKET).upload(path, file, { upsert: true })
         if (up.error) throw up.error
-        const { data: pub } = supabase.storage.from('submissions').getPublicUrl(path)
+        const { data: pub } = supabase.storage.from(HOMEWORK_BUCKET).getPublicUrl(path)
         fileUrl = pub?.publicUrl || path
       }
       const { error } = await submitHomework(supabase, { assignmentId: a.id, studentId: lesson.student_id, fileUrl, comment })
@@ -278,6 +280,15 @@ export default function LessonPage() {
       setTimeout(() => setToast(null), 2500)
     }
   }
+
+  // Обновление страницы урока при глобальном событии из TeacherHomeworks
+  useEffect(() => {
+    const onPendingUpdated = () => {
+      refreshAssignments()
+    }
+    window.addEventListener('pendingHomeworksUpdated', onPendingUpdated)
+    return () => window.removeEventListener('pendingHomeworksUpdated', onPendingUpdated)
+  }, [lesson?.id])
 
   const handleGrade = async (a) => {
     try {
@@ -353,7 +364,10 @@ export default function LessonPage() {
       <section className="card">
         <h2 className="mb-3 text-lg font-semibold">Задания урока</h2>
         <ul className="divide-y divide-gray-100">
-          {assignments.map(a => {
+          {(canGrade && showOnlyPending ? assignments.filter(a => {
+            const sFilter = subsByAssign[a.id] || null
+            return !!sFilter && (sFilter.grade == null || String(sFilter.grade).trim() === '')
+          }) : assignments).map(a => {
             const s = subsByAssign[a.id] || null
             const st = statusFromSubmission(s)
             return (
@@ -368,26 +382,40 @@ export default function LessonPage() {
                 </div>
 
                 {s && (
-                  <div className="text-sm text-gray-600">
-                    {s.file_url ? (<a className="text-orange-600" href={s.file_url} target="_blank" rel="noreferrer">Файл</a>) : 'Файл: —'}
-                    {' • '}отправлено: {fmtDateTime(s.created_at)}
-                    {s.feedback ? <> {' • '} отзыв: {safeText(s.feedback)}</> : null}
+                  <div className="text-sm text-gray-600 space-y-1">
+                    <div>
+                      {s.file_url ? (<a className="text-orange-600" href={s.file_url} target="_blank" rel="noreferrer">Файл</a>) : 'Файл: —'}
+                      {' • '}отправлено: {fmtDateTime(s.created_at)}
+                    </div>
+                    <div>Комментарий: {safeText(s.comment)}</div>
                   </div>
                 )}
 
                 {canSubmit && (
                   <div className="flex items-center gap-3">
-                    <input type="file" onChange={(e) => setFileByAssign(prev => ({ ...prev, [a.id]: e.target.files?.[0] || null }))} />
-                    <input className="input" placeholder="Комментарий" value={commentByAssign[a.id] || ''} onChange={(e) => setCommentByAssign(prev => ({ ...prev, [a.id]: e.target.value }))} />
-                    <button className="btn-outline" onClick={() => handleSubmit(a)}>Отправить</button>
+                    {!s && (
+                      <a className="btn-outline" href={`/student/assignments/${a.id}`}>Отправить ДЗ</a>
+                    )}
+                    {s && (s.grade == null || String(s.grade).trim() === '') && (
+                      <a className="btn-outline" href={`/student/assignments/${a.id}`}>Редактировать отправку</a>
+                    )}
+                    {s && s.grade != null && String(s.grade).trim() !== '' && (
+                      <a className="btn-outline" href={`/student/assignments/${a.id}`}>Посмотреть комментарий преподавателя</a>
+                    )}
                   </div>
                 )}
 
                 {canGrade && (
                   <div className="flex items-center gap-3">
-                    <input className="input w-24" placeholder="Оценка" value={gradeByAssign[a.id] || ''} onChange={(e) => setGradeByAssign(prev => ({ ...prev, [a.id]: e.target.value }))} />
-                    <input className="input" placeholder="Отзыв" value={feedbackByAssign[a.id] || ''} onChange={(e) => setFeedbackByAssign(prev => ({ ...prev, [a.id]: e.target.value }))} />
-                    <button className="btn-primary" onClick={() => handleGrade(a)} disabled={!subsByAssign[a.id]}>Сохранить</button>
+                    {(!s) ? null : ((s.grade == null || String(s.grade).trim() === '') ? (
+                      <button className="btn-primary" onClick={() => setModalItem({ assignment_id: a.id, student_id: lesson.student_id, file_url: s.file_url, comment: s.comment, submitted_at: s.created_at, assignment_title: a.title, lesson_id: lesson.id, start_at: lesson.start_at })}>
+                        Проверить
+                      </button>
+                    ) : (
+                      <button className="btn-outline" onClick={() => setModalItem({ assignment_id: a.id, student_id: lesson.student_id, file_url: s.file_url, comment: s.comment, submitted_at: s.created_at, assignment_title: a.title, lesson_id: lesson.id, start_at: lesson.start_at, grade: s.grade, feedback: s.feedback })}>
+                        Открыть работу
+                      </button>
+                    ))}
                   </div>
                 )}
               </li>
@@ -398,6 +426,14 @@ export default function LessonPage() {
           )}
         </ul>
       </section>
+
+      <GradeModal
+        visible={!!modalItem}
+        item={modalItem}
+        studentName={lesson?.student?.display_name || null}
+        onClose={() => setModalItem(null)}
+        onSaved={() => { setModalItem(null); refreshAssignments(); }}
+      />
     </div>
   )
 }

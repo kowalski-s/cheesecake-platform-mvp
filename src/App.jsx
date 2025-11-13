@@ -21,6 +21,7 @@ import SchedulePage from "./pages/Schedule";
 import MaterialsPage from "./pages/Materials";
 import AssignmentsTeacherPage from "./pages/AssignmentsTeacher";
 import AssignmentsStudentPage from "./pages/AssignmentsStudent";
+import StudentAssignmentEditor from "./pages/StudentAssignmentEditor";
 import TeacherHomeworksPage from "./pages/TeacherHomeworks";
 import LessonPage from "./pages/Lesson";
 import AdminUsersPage from "./pages/AdminUsers";
@@ -144,6 +145,16 @@ function App() {
                     <ProtectedRoute>
                       <RoleGuard allow={["student"]}>
                         <AssignmentsStudentPage />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/student/assignments/:id"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["student"]}>
+                        <StudentAssignmentEditor />
                       </RoleGuard>
                     </ProtectedRoute>
                   }

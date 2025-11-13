@@ -5,16 +5,46 @@ import Loading from '@/components/ui/Loading'
 import { getMyTeacherId, gradeSubmission } from '@/lib/api'
 import toast from '@/lib/safeToast'
 
-function GradeModal({ visible, item, onClose, onSaved }) {
+export function GradeModal({ visible, item, studentName, onClose, onSaved }) {
   const [grade, setGrade] = useState('')
   const [feedback, setFeedback] = useState('')
   const [saving, setSaving] = useState(false)
+  const [assignmentInfo, setAssignmentInfo] = useState(null)
+  const [lessonInfo, setLessonInfo] = useState(null)
+  const alreadyGraded = item?.grade != null && String(item.grade).trim() !== ''
 
   useEffect(() => {
     if (!visible) return
     setGrade('')
     setFeedback('')
-  }, [visible])
+    // Доп. загрузка описания задания и информации о занятии
+    ;(async () => {
+      try {
+        if (item?.assignment_id) {
+          const { data: aRow } = await supabase
+            .from('assignments')
+            .select('id, title, description, lesson_id')
+            .eq('id', item.assignment_id)
+            .maybeSingle()
+          setAssignmentInfo(aRow || null)
+          const lid = aRow?.lesson_id || item?.lesson_id || null
+          if (lid) {
+            const { data: lRow } = await supabase
+              .from('lessons')
+              .select('id, title, start_at, end_at')
+              .eq('id', lid)
+              .maybeSingle()
+            setLessonInfo(lRow || null)
+          } else {
+            setLessonInfo(null)
+          }
+        } else {
+          setAssignmentInfo(null)
+          setLessonInfo(null)
+        }
+      } catch {}
+    })()
+  }, [visible, item])
 
   if (!visible || !item) return null
 
@@ -49,18 +79,37 @@ function GradeModal({ visible, item, onClose, onSaved }) {
         <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600" aria-label="Закрыть">✕</button>
         <div className="p-6 space-y-4">
           <h3 className="text-lg font-semibold">Проверка работы</h3>
-          <div className="text-sm text-gray-600">
-            <div className="font-medium">{item.assignment_title || '—'}</div>
-            <div>Студент: {item.student_id}</div>
+          <div className="text-sm text-gray-600 space-y-1">
+            <div className="font-medium">{assignmentInfo?.title || item.assignment_title || '—'}</div>
+            {assignmentInfo?.description ? (<div>Описание: {assignmentInfo.description}</div>) : null}
+            <div>Студент: {studentName || item.student_id}</div>
             <div>Сдано: {item.submitted_at ? new Date(item.submitted_at).toLocaleString() : '—'}</div>
+            {lessonInfo ? (
+              <div>Занятие: {lessonInfo?.start_at ? new Date(lessonInfo.start_at).toLocaleString() : lessonInfo?.id}</div>
+            ) : (
+              <div>Занятие: {item.start_at ? new Date(item.start_at).toLocaleString() : item.lesson_id}</div>
+            )}
+            <div className="space-y-2">
+              <div className="text-sm text-gray-500">Ответ ученика</div>
+              <div className="text-base text-gray-800 whitespace-pre-wrap">{item.comment || '—'}</div>
+              {item.file_url ? (
+                <div>
+                  <a className="text-orange-600" href={item.file_url} target="_blank" rel="noreferrer">Открыть файл</a>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500">Файл: —</div>
+              )}
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-3">
-            <input className="input" placeholder="Оценка (0–100)" value={grade} onChange={(e) => setGrade(e.target.value)} />
-            <input className="input" placeholder="Комментарий (необязательно)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
-          </div>
+          {!alreadyGraded && (
+            <div className="grid grid-cols-1 gap-3">
+              <input className="input" placeholder="Оценка (0–100)" value={grade} onChange={(e) => setGrade(e.target.value)} />
+              <textarea className="input h-28" placeholder="Комментарий (необязательно)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <button className="btn-outline" onClick={onClose}>Отмена</button>
-            <button className="btn-primary" onClick={save} disabled={saving}>Сохранить</button>
+            {!alreadyGraded && (<button className="btn-primary" onClick={save} disabled={saving}>Сохранить</button>)}
           </div>
         </div>
       </div>
@@ -76,6 +125,7 @@ export default function TeacherHomeworksPage() {
   const [error, setError] = useState(null)
   const [modalItem, setModalItem] = useState(null)
   const [count, setCount] = useState(0)
+  const [studentMap, setStudentMap] = useState({})
 
   useEffect(() => {
     const load = async () => {
@@ -92,6 +142,16 @@ export default function TeacherHomeworksPage() {
         if (error) throw error
         setItems(data || [])
         setCount(count ?? 0)
+        const sids = [...new Set((data || []).map(i => i.student_id).filter(Boolean))]
+        if (sids.length) {
+          const { data: studs } = await supabase
+            .from('students')
+            .select('id, display_name')
+            .in('id', sids)
+          setStudentMap(Object.fromEntries((studs || []).map(s => [s.id, s.display_name])))
+        } else {
+          setStudentMap({})
+        }
       } catch (e) {
         console.error('ERR_LOAD_TEACHER_HOMEWORKS', e)
         setError(e?.message || 'Не удалось загрузить непроверенные работы')
@@ -128,9 +188,10 @@ export default function TeacherHomeworksPage() {
               <li key={`${i.assignment_id}:${i.student_id}`} className="py-3 flex items-center justify-between">
                 <div>
                   <div className="font-medium">{i.assignment_title || i.assignment_id}</div>
-                  <div className="text-sm text-gray-600">Студент: {i.student_id}</div>
+                  <div className="text-sm text-gray-600">Студент: {studentMap[i.student_id] || i.student_id}</div>
                   <div className="text-sm text-gray-600">Сдано: {i.submitted_at ? new Date(i.submitted_at).toLocaleString() : '—'}</div>
                   <div className="text-sm text-gray-600">Урок: {i.start_at ? new Date(i.start_at).toLocaleString() : i.lesson_id}</div>
+                  <div className="text-xs text-gray-500">{i.comment ? 'Есть комментарий' : 'Комментарий: —'}{i.file_url ? ' • есть файл' : ' • файл: —'}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   {i.file_url ? (<a className="btn-outline" href={i.file_url} target="_blank" rel="noreferrer">Открыть файл</a>) : null}
@@ -145,7 +206,7 @@ export default function TeacherHomeworksPage() {
         )}
       </section>
 
-      <GradeModal visible={!!modalItem} item={modalItem} onClose={() => setModalItem(null)} onSaved={onSaved} />
+      <GradeModal visible={!!modalItem} item={modalItem} studentName={modalItem ? (studentMap[modalItem.student_id] || null) : null} onClose={() => setModalItem(null)} onSaved={onSaved} />
     </div>
   )
 }
