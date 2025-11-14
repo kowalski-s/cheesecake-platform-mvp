@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabaseClient'
 // }
 export async function getStudentAnalytics(studentId) {
   if (!studentId) throw new Error('studentId is required')
+  const nowIso = new Date().toISOString()
 
   // Активный абонемент (может отсутствовать)
   const { data: activeSub } = await supabase
@@ -20,35 +21,32 @@ export async function getStudentAnalytics(studentId) {
     .eq('student_id', studentId)
     .maybeSingle()
 
-  // Идентификаторы всех уроков ученика (нужны для подсчёта заданий)
-  const { data: lessonsIdsRows } = await supabase
-    .from('lessons')
-    .select('id, start_at')
+  // Количество уникальных заданий, назначенных ученику (assignment_targets)
+  const { data: atRows, error: atErr } = await supabase
+    .from('assignment_targets')
+    .select('assignment_id')
     .eq('student_id', studentId)
 
-  const lessonIds = (lessonsIdsRows || []).map(l => l.id)
+  if (atErr) throw atErr
+  const totalAssignments = Array.isArray(atRows) ? (new Set(atRows.map(r => r.assignment_id)).size) : 0
 
-  // Количество заданий для уроков ученика
-  let totalAssignments = 0
-  if (lessonIds.length > 0) {
-    const { count: aCount } = await supabase
-      .from('assignments')
-      .select('id', { count: 'exact', head: true })
-      .in('lesson_id', lessonIds)
-    totalAssignments = aCount ?? 0
-  }
-
-  // Количество отправленных решений (по студенту)
-  const { count: completedAssignments } = await supabase
+  // Количество уникальных выполненных заданий (по наличию сабмишена)
+  const { data: subRows, error: subErr } = await supabase
     .from('submissions')
-    .select('id', { count: 'exact', head: true })
+    .select('assignment_id')
     .eq('student_id', studentId)
 
-  // Последняя активность: максимум из последнего урока и последнего сабмишна
+  if (subErr) throw subErr
+  let completedAssignments = Array.isArray(subRows) ? (new Set(subRows.map(r => r.assignment_id)).size) : 0
+  // completed не должен превышать total
+  completedAssignments = Math.min(completedAssignments, totalAssignments)
+
+  // Последняя активность: максимум из прошедшего урока (start_at <= now) и последнего сабмишна
   const { data: lastLessonRow } = await supabase
     .from('lessons')
     .select('start_at')
     .eq('student_id', studentId)
+    .lte('start_at', nowIso)
     .order('start_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -111,7 +109,7 @@ export async function getStudentAnalytics(studentId) {
     completedLessons,
     progressPercent,
     totalAssignments,
-    completedAssignments: completedAssignments ?? 0,
+    completedAssignments,
     averageGrade,
     lastActivityAt,
     gradesTimeline,

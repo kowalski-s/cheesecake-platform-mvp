@@ -13,6 +13,45 @@ import { getStudentAnalytics } from '@/api/studentAnalytics'
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { format } from 'date-fns'
 
+// Отдельный компонент графика оценок с одноразовой анимацией
+function GradesTimelineChart({ data, domainMax }) {
+  const [shouldAnimate, setShouldAnimate] = useState(false)
+  useEffect(() => {
+    if (!window.__studentAnalyticsAnimatedOnce) {
+      setShouldAnimate(true)
+      window.__studentAnalyticsAnimatedOnce = true
+    }
+  }, [])
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="date" tickFormatter={(v) => format(new Date(v), 'dd.MM')} />
+        <YAxis domain={[0, domainMax]} tickCount={6} />
+        <Tooltip
+          formatter={(value, name, props) => [value, props.payload.title]}
+          labelFormatter={(label) => format(new Date(label), 'dd.MM.yyyy HH:mm')}
+        />
+        <Line
+          type="monotone"
+          dataKey="grade"
+          stroke="#ef4444"
+          strokeWidth={2}
+          dot={false}
+          activeDot={false}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          connectNulls
+          isAnimationActive={shouldAnimate}
+          animationDuration={1800}
+          animationEasing="ease-in-out"
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
 export default function Students() {
   const { session, profile } = useAuth()
   const user = session?.user || null
@@ -44,11 +83,6 @@ export default function Students() {
       window.removeEventListener('unhandledrejection', h)
     }
   }, [])
-
-  // Редирект, если роль не student
-  if (role && role !== 'student') {
-    return <Navigate to="/" replace />
-  }
 
   useEffect(() => {
     async function load() {
@@ -147,7 +181,13 @@ export default function Students() {
           setAnalyticsLoading(true)
           setAnalyticsError(null)
           const a = await getStudentAnalytics(myStudentId)
-          setAnalytics(a)
+          // Синхронизируем метрику «Уроки» с карточкой «Прогресс» (используем те же вычисления: done/planned)
+          setAnalytics({
+            ...a,
+            lessonsTotal: total,
+            completedLessons: completed,
+            progressPercent: pct,
+          })
         } catch (e) {
           console.error('ERR_LOAD_ANALYTICS', e, e?.stack)
           setAnalyticsError(e)
@@ -186,6 +226,8 @@ export default function Students() {
   return (
     <div className="space-y-6">
       <PageHeader title="Личный кабинет ученика" />
+      {/* Редирект, если роль не student (без раннего return, чтобы не нарушать порядок хуков) */}
+      {role && role !== 'student' ? <Navigate to="/" replace /> : null}
       {(() => {
         const code = error?.code
         const details = error?.details
@@ -240,19 +282,22 @@ export default function Students() {
               <div className="mt-2 h-2 w-full bg-gray-200 rounded-full overflow-hidden" aria-label="Прогресс по урокам">
                 <div className="h-full bg-brand" style={{ width: `${analytics?.progressPercent ?? 0}%` }}></div>
               </div>
+              <div className="text-xs text-gray-500 mt-1">{analytics?.progressPercent ?? 0}% программы</div>
             </div>
 
             {/* Домашние задания */}
             <div className="card p-4">
               <div className="text-sm text-gray-500 mb-1">Домашние задания</div>
-              <div className="font-semibold">{analytics?.completedAssignments ?? 0} / {analytics?.totalAssignments ?? 0}</div>
-              <div className="text-xs text-gray-500 mt-1">отправленные ДЗ</div>
+              <div className="font-semibold">выполнено {analytics?.completedAssignments ?? 0} из {analytics?.totalAssignments ?? 0} ДЗ</div>
             </div>
 
             {/* Средняя оценка */}
             <div className="card p-4">
               <div className="text-sm text-gray-500 mb-1">Средняя оценка</div>
               <div className="font-semibold">{analytics?.averageGrade != null ? analytics.averageGrade : '—'}</div>
+              {Array.isArray(analytics?.gradesTimeline) && analytics.gradesTimeline.some(r => Number(r?.grade) > 10) ? (
+                <div className="text-xs text-gray-500 mt-1">из 100</div>
+              ) : null}
             </div>
 
             {/* Последняя активность */}
@@ -272,15 +317,10 @@ export default function Students() {
           ) : (Array.isArray(analytics?.gradesTimeline) && analytics.gradesTimeline.length > 0 ? (
             <div className="card p-4">
               <div style={{ width: '100%', height: 280 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={analytics.gradesTimeline} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tickFormatter={(v) => format(new Date(v), 'dd.MM')} />
-                    <YAxis domain={[0, 10]} tickCount={6} />
-                    <Tooltip formatter={(value, name, props) => [value, props.payload.title]} labelFormatter={(label) => format(new Date(label), 'dd.MM.yyyy HH:mm')} />
-                    <Line type="monotone" dataKey="grade" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+                <GradesTimelineChart
+                  data={analytics.gradesTimeline}
+                  domainMax={(Array.isArray(analytics?.gradesTimeline) && analytics.gradesTimeline.some(r => Number(r?.grade) > 10)) ? 100 : 10}
+                />
               </div>
             </div>
           ) : (

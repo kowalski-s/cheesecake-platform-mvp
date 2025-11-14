@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
 import Loading from "../components/ui/Loading";
+import Section from "../components/ui/Section";
+import toast from "@/lib/safeToast";
+import { format } from "date-fns";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { getTeacherAnalytics } from "@/api/teacherAnalytics";
 
 export default function TeacherProfile() {
   const { session, role, user } = useAuth();
@@ -12,6 +17,9 @@ export default function TeacherProfile() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [teacherId, setTeacherId] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState(null);
   const initials = (() => {
     const e = email || session?.user?.email || "";
     return (e.split("@")[0]?.[0] || "?").toUpperCase();
@@ -56,9 +64,9 @@ export default function TeacherProfile() {
       } finally {
         setLoading(false);
       }
-    };
-    load();
-  }, [userId]);
+  };
+  load();
+}, [userId]);
 
   const onSave = async () => {
     setSaving(true);
@@ -80,10 +88,10 @@ export default function TeacherProfile() {
     } catch (e) {
       console.error(e);
       setError(e?.message || "Не удалось сохранить изменения");
-    } finally {
-      setSaving(false);
-    }
-  };
+  } finally {
+    setSaving(false);
+  }
+};
 
 
   return (
@@ -154,6 +162,158 @@ export default function TeacherProfile() {
       )}
 
       {/* ДЗ удалены из профиля — остаются только личные данные */}
+
+      {/* Аналитика преподавателя */}
+      <TeacherAnalyticsSection teacherId={teacherId} />
     </div>
   );
+}
+
+// График оценок преподавателя с одноразовой анимацией на сессию
+function TeacherGradesTimelineChart({ data, domainMax }) {
+  useEffect(() => {
+    if (!window.__teacherAnalyticsAnimatedOnce) {
+      // Устанавливаем флаг, но не триггерим перерендер, чтобы анимация не прерывалась
+      window.__teacherAnalyticsAnimatedOnce = true;
+    }
+  }, []);
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="date" tickFormatter={(v) => format(new Date(v), 'dd.MM')} />
+        <YAxis domain={[0, domainMax]} tickCount={6} />
+        <Tooltip
+          formatter={(value, name, props) => [value, `${props?.payload?.title || '—'} — ${props?.payload?.student || '—'}`]}
+          labelFormatter={(label) => format(new Date(label), 'dd.MM.yyyy HH:mm')}
+        />
+        <Line
+          type="monotone"
+          dataKey="grade"
+          stroke="#ef4444"
+          strokeWidth={2}
+          dot={false}
+          activeDot={false}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          connectNulls
+          isAnimationActive={!window.__teacherAnalyticsAnimatedOnce}
+          animationDuration={1800}
+          animationEasing="ease-in-out"
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+function TeacherAnalyticsSection({ teacherId }) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [data, setData] = useState(null)
+
+  useEffect(() => {
+    let mounted = true
+    async function loadAnalytics() {
+      try {
+        setLoading(true)
+        setError(null)
+        if (!teacherId) {
+          setData(null)
+          return
+        }
+        const a = await getTeacherAnalytics(teacherId)
+        if (mounted) setData(a)
+      } catch (e) {
+        console.error('ERR_LOAD_TEACHER_ANALYTICS', e, e?.stack)
+        setError(e)
+        if (toast && typeof toast.error === 'function') {
+          toast.error('Не удалось загрузить аналитику')
+        }
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+    loadAnalytics()
+    return () => { mounted = false }
+  }, [teacherId])
+
+  const totalLessons = data?.totalLessons ?? 0
+  const completedLessons = data?.completedLessons ?? 0
+  const progressPercent = totalLessons ? Math.round((completedLessons / totalLessons) * 100) : 0
+  const totalAssignmentsGiven = data?.totalAssignmentsGiven ?? 0
+  const checkedAssignments = data?.checkedAssignments ?? 0
+  const avgGrade = data?.averageGrade
+  const lastActivityAt = data?.lastActivityAt
+
+  return (
+    <Section>
+      <h2 className="text-lg font-semibold mb-3">Аналитика преподавателя</h2>
+
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+          <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+          <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+          <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          {/* Уроки */}
+          <div className="card p-4">
+            <div className="text-sm text-gray-500 mb-1">Уроки</div>
+            <div className="font-semibold">Проведено {completedLessons} из {totalLessons}</div>
+            <div className="mt-2 h-2 w-full bg-gray-200 rounded-full overflow-hidden" aria-label="Прогресс расписания">
+              <div className="h-full bg-brand" style={{ width: `${progressPercent}%` }}></div>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">{progressPercent}% расписания</div>
+          </div>
+
+          {/* Домашние задания */}
+          <div className="card p-4">
+            <div className="text-sm text-gray-500 mb-1">Домашние задания</div>
+            <div className="font-semibold">Проверено {checkedAssignments} из {totalAssignmentsGiven}</div>
+            <div className="text-xs text-gray-500 mt-1">Проверенные ДЗ</div>
+          </div>
+
+          {/* Средняя оценка */}
+          <div className="card p-4">
+            <div className="text-sm text-gray-500 mb-1">Средняя оценка</div>
+            <div className="font-semibold">{avgGrade != null ? avgGrade : '—'}</div>
+            {(Array.isArray(data?.gradesTimeline) && data.gradesTimeline.some(r => Number(r?.grade) > 10)) ? (
+              <div className="text-xs text-gray-500 mt-1">из 100</div>
+            ) : null}
+          </div>
+
+          {/* Последняя активность */}
+          <div className="card p-4">
+            <div className="text-sm text-gray-500 mb-1">Последняя активность</div>
+            <div className="font-semibold">{lastActivityAt ? format(new Date(lastActivityAt), 'dd.MM.yyyy HH:mm') : '—'}</div>
+          </div>
+        </div>
+      )}
+
+      {/* График оценок */}
+      <div className="mt-4">
+        {loading ? (
+          <div className="card p-4">
+            <div className="h-72 bg-gray-100 animate-pulse rounded"></div>
+          </div>
+        ) : (Array.isArray(data?.gradesTimeline) && data.gradesTimeline.length > 0 ? (
+          <div className="card p-4">
+            <div style={{ width: '100%', height: 280 }}>
+              <TeacherGradesTimelineChart
+                data={data.gradesTimeline}
+                domainMax={(Array.isArray(data?.gradesTimeline) && data.gradesTimeline.some(r => Number(r?.grade) > 10)) ? 100 : 10}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="card p-4">
+            <div className="text-sm text-gray-500">Пока нет данных</div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  )
 }
