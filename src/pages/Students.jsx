@@ -13,12 +13,10 @@ import { getStudentAnalytics } from '@/api/studentAnalytics'
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { format } from 'date-fns'
 
-// Отдельный компонент графика оценок с одноразовой анимацией
-function GradesTimelineChart({ data, domainMax }) {
-  const [shouldAnimate, setShouldAnimate] = useState(false)
+// Отдельный компонент графика ученика. Глобальный флаг — без локальных состояний.
+function StudentGradesTimelineChart({ data, domainMax }) {
   useEffect(() => {
     if (!window.__studentAnalyticsAnimatedOnce) {
-      setShouldAnimate(true)
       window.__studentAnalyticsAnimatedOnce = true
     }
   }, [])
@@ -43,7 +41,7 @@ function GradesTimelineChart({ data, domainMax }) {
           strokeLinecap="round"
           strokeLinejoin="round"
           connectNulls
-          isAnimationActive={shouldAnimate}
+          isAnimationActive={false}
           animationDuration={1800}
           animationEasing="ease-in-out"
         />
@@ -308,26 +306,22 @@ export default function Students() {
           </div>
         )}
 
-        {/* График оценок */}
+        {/* График оценок — всегда смонтирован, скелетон внутри той же секции */}
         <div className="mt-4">
-          {analyticsLoading ? (
-            <div className="card p-4">
-              <div className="h-72 bg-gray-100 animate-pulse rounded"></div>
+          <div className="card p-4">
+            <div style={{ width: '100%', height: 280, position: 'relative' }}>
+              <StudentGradesTimelineChart
+                data={Array.isArray(analytics?.gradesTimeline) ? analytics.gradesTimeline : []}
+                domainMax={(Array.isArray(analytics?.gradesTimeline) && analytics.gradesTimeline.some(r => Number(r?.grade) > 10)) ? 100 : 10}
+              />
+              {analyticsLoading && (
+                <div className="absolute inset-0 bg-gray-100 animate-pulse rounded"></div>
+              )}
             </div>
-          ) : (Array.isArray(analytics?.gradesTimeline) && analytics.gradesTimeline.length > 0 ? (
-            <div className="card p-4">
-              <div style={{ width: '100%', height: 280 }}>
-                <GradesTimelineChart
-                  data={analytics.gradesTimeline}
-                  domainMax={(Array.isArray(analytics?.gradesTimeline) && analytics.gradesTimeline.some(r => Number(r?.grade) > 10)) ? 100 : 10}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="card p-4">
-              <div className="text-sm text-gray-500">Пока нет данных</div>
-            </div>
-          ))}
+            {(!analyticsLoading && (!Array.isArray(analytics?.gradesTimeline) || analytics.gradesTimeline.length === 0)) && (
+              <div className="text-sm text-gray-500 mt-2">Пока нет данных</div>
+            )}
+          </div>
         </div>
       </Section>
 

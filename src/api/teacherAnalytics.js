@@ -119,3 +119,153 @@ export async function getTeacherAnalytics(teacherId) {
     return empty
   }
 }
+
+// Статистика по ученикам конкретного преподавателя с пагинацией
+// Возвращает { items: [{ studentId, studentName, lessonsWithTeacher, submittedAssignments, avgGrade, lastActivityAt }], total }
+export async function getTeacherStudentsStats(teacherId, { limit = 20, offset = 0 } = {}) {
+  const empty = { items: [], total: 0 }
+  try {
+    if (!teacherId || !supabase) return empty
+
+    const nowIso = new Date().toISOString()
+
+    // Все уроки преподавателя (нужны student_id и id)
+    const { data: lessons, error: lessonsErr } = await supabase
+      .from('lessons')
+      .select('id, student_id, start_at')
+      .eq('teacher_id', teacherId)
+    if (lessonsErr) throw lessonsErr
+
+    const lessonRows = Array.isArray(lessons) ? lessons : []
+    const teacherLessonIds = lessonRows.map(l => l.id)
+    const uniqueStudentIds = Array.from(new Set(lessonRows.map(l => l.student_id).filter(Boolean)))
+    const total = uniqueStudentIds.length
+    if (total === 0) return { items: [], total }
+
+    // Пагинация по списку учеников
+    const pageStudentIds = uniqueStudentIds.slice(offset, offset + limit)
+
+    // Профили учеников для отображения имени (и user_id для fallback в users/v_users_full)
+    let studentProfileById = {}
+    let userInfoById = {}
+    if (pageStudentIds.length > 0) {
+      // Берём из той же таблицы, что используется в интерфейсе: public.students.display_name
+      const { data: studentRows, error: studentErr } = await supabase
+        .from('students')
+        .select('id, display_name, user_id, teacher_id')
+        .in('id', pageStudentIds)
+        .eq('teacher_id', teacherId)
+      if (studentErr) throw studentErr
+      const studs = Array.isArray(studentRows) ? studentRows : []
+      studentProfileById = Object.fromEntries(studs.map(s => [s.id, s]))
+
+      // Доп. источник имени/email: public view v_users_full (id, email, display_name)
+      const userIds = [...new Set(studs.map(s => s.user_id || s.id).filter(Boolean))]
+      if (userIds.length > 0) {
+        try {
+          const { data: usersRows } = await supabase
+            .from('v_users_full')
+            .select('id, email, display_name')
+            .in('id', userIds)
+          const users = Array.isArray(usersRows) ? usersRows : []
+          userInfoById = Object.fromEntries(users.map(u => [u.id, u]))
+        } catch (e) {
+          // Если RLS не позволяет учителю читать v_users_full — просто пропускаем, остаётся display_name из students
+          userInfoById = {}
+        }
+      }
+    }
+
+    const computeStudentName = (studentId) => {
+      const s = studentProfileById[studentId]
+      const primary = (s?.display_name || '').trim()
+      if (primary) return primary
+      const uid = s?.user_id || studentId
+      const u = userInfoById[uid]
+      const secondary = (u?.display_name || '').trim()
+      if (secondary) return secondary
+      const email = (u?.email || '').trim()
+      if (email) {
+        const local = email.split('@')[0]
+        if (local) return local
+      }
+      return 'Без имени'
+    }
+
+    // Задания преподавателя по его урокам
+    let assignmentIds = []
+    if (teacherLessonIds.length > 0) {
+      const { data: assigns, error: assignsErr } = await supabase
+        .from('assignments')
+        .select('id, lesson_id')
+        .in('lesson_id', teacherLessonIds)
+      if (assignsErr) throw assignsErr
+      assignmentIds = (Array.isArray(assigns) ? assigns : []).map(a => a.id)
+    }
+
+    // Сабмишены по заданиям этого преподавателя для выбранных учеников
+    let subsRows = []
+    if (assignmentIds.length > 0 && pageStudentIds.length > 0) {
+      const { data: subs, error: subsErr } = await supabase
+        .from('submissions')
+        .select('assignment_id, student_id, grade, created_at, updated_at')
+        .in('assignment_id', assignmentIds)
+        .in('student_id', pageStudentIds)
+      if (subsErr) throw subsErr
+      subsRows = Array.isArray(subs) ? subs : []
+    }
+
+    // Агрегация по каждому ученику
+    const items = pageStudentIds.map(studentId => {
+      // Уроки с этим преподавателем
+      const studentLessons = lessonRows.filter(l => l.student_id === studentId)
+      const lessonsWithTeacher = studentLessons.length
+
+      // Сабмишены этого ученика по заданиям данного преподавателя
+      const studentSubs = subsRows.filter(s => s.student_id === studentId)
+
+      // Уникальные выполненные ДЗ
+      const submittedAssignments = (new Set(studentSubs.map(s => s.assignment_id))).size
+
+      // Средняя оценка по сабмишенам с непустой оценкой
+      const numericGrades = studentSubs
+        .map(s => {
+          const g = typeof s.grade === 'string' ? parseFloat(String(s.grade).replace(',', '.')) : (typeof s.grade === 'number' ? s.grade : NaN)
+          return Number.isFinite(g) ? g : null
+        })
+        .filter(g => g !== null)
+      const avgGrade = numericGrades.length > 0
+        ? Math.round((numericGrades.reduce((a, b) => a + b, 0) / numericGrades.length) * 10) / 10
+        : null
+
+      // Последняя активность: максимум из прошедших уроков и сабмишенов
+      const pastLessonTimes = studentLessons
+        .map(l => l?.start_at ? new Date(l.start_at).toISOString() : null)
+        .filter(t => t && t <= nowIso)
+      const lastLessonAt = pastLessonTimes.length > 0 ? pastLessonTimes.sort((a, b) => (a > b ? -1 : 1))[0] : null
+
+      const subTimes = studentSubs
+        .map(s => (s?.updated_at || s?.created_at) ? new Date(s.updated_at || s.created_at).toISOString() : null)
+        .filter(Boolean)
+      const lastSubAt = subTimes.length > 0 ? subTimes.sort((a, b) => (a > b ? -1 : 1))[0] : null
+
+      const lastActivityAt = [lastLessonAt, lastSubAt]
+        .filter(Boolean)
+        .sort((a, b) => (a > b ? -1 : 1))[0] || null
+
+      return {
+        studentId,
+        studentName: computeStudentName(studentId),
+        lessonsWithTeacher,
+        submittedAssignments,
+        avgGrade,
+        lastActivityAt,
+      }
+    })
+
+    return { items, total }
+  } catch (e) {
+    console.error('getTeacherStudentsStats error', e, e?.stack)
+    return empty
+  }
+}

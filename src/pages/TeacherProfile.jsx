@@ -6,7 +6,7 @@ import Section from "../components/ui/Section";
 import toast from "@/lib/safeToast";
 import { format } from "date-fns";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { getTeacherAnalytics } from "@/api/teacherAnalytics";
+import { getTeacherAnalytics, getTeacherStudentsStats } from "@/api/teacherAnalytics";
 
 export default function TeacherProfile() {
   const { session, role, user } = useAuth();
@@ -165,6 +165,9 @@ export default function TeacherProfile() {
 
       {/* Аналитика преподавателя */}
       <TeacherAnalyticsSection teacherId={teacherId} />
+
+      {/* Ученики и прогресс */}
+      <TeacherStudentsStatsSection teacherId={teacherId} />
     </div>
   );
 }
@@ -204,6 +207,131 @@ function TeacherGradesTimelineChart({ data, domainMax }) {
         />
       </LineChart>
     </ResponsiveContainer>
+  )
+}
+
+// Таблица "Ученики и прогресс" с пагинацией
+function TeacherStudentsStatsSection({ teacherId }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [items, setItems] = useState([])
+  const [total, setTotal] = useState(0)
+  const [limit, setLimit] = useState(20)
+  const [offset, setOffset] = useState(0)
+
+  useEffect(() => {
+    let mounted = true
+    async function loadStats() {
+      try {
+        setLoading(true)
+        setError(null)
+        if (!teacherId) {
+          setItems([])
+          setTotal(0)
+          return
+        }
+        const res = await getTeacherStudentsStats(teacherId, { limit, offset })
+        if (!mounted) return
+        setItems(Array.isArray(res?.items) ? res.items : [])
+        setTotal(Number(res?.total) || 0)
+      } catch (e) {
+        console.error('ERR_LOAD_TEACHER_STUDENTS_STATS', e, e?.stack)
+        setError(e)
+        if (toast && typeof toast.error === 'function') {
+          toast.error('Не удалось загрузить статистику по ученикам')
+        }
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+    loadStats()
+    return () => { mounted = false }
+  }, [teacherId, limit, offset])
+
+  const canPrev = offset > 0
+  const canNext = offset + limit < total
+
+  return (
+    <Section>
+      <h2 className="text-lg font-semibold mb-3">Ученики и прогресс</h2>
+
+      {loading ? (
+        <div className="card p-4">
+          <div className="space-y-2">
+            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
+            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
+            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
+            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
+            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
+          </div>
+        </div>
+      ) : error ? (
+        <div className="card p-4">
+          <div className="text-sm text-gray-500">Пока нет данных</div>
+        </div>
+      ) : total === 0 ? (
+        <div className="card p-4">
+          <div className="font-medium mb-1">Пока нет учеников</div>
+          <div className="text-sm text-gray-500">Как только появятся ученики, вы увидите их прогресс здесь</div>
+        </div>
+      ) : (
+        <div className="card p-4">
+          {/* Таблица для десктопа */}
+          <div className="hidden md:block overflow-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-gray-500">
+                  <th className="text-left py-2 pr-3">Имя ученика</th>
+            <th className="text-left py-2 pr-3">Кол-во уроков</th>
+                  <th className="text-left py-2 pr-3">Выполненные ДЗ</th>
+                  <th className="text-left py-2 pr-3">Средняя оценка</th>
+                  <th className="text-left py-2">Последняя активность</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {items.map(row => (
+                  <tr key={row.studentId}>
+                    <td className="py-2 pr-3 font-medium">{row.studentName || 'Без имени'}</td>
+                    <td className="py-2 pr-3">{row.lessonsWithTeacher ?? 0}</td>
+                    <td className="py-2 pr-3">{row.submittedAssignments ?? 0}</td>
+                    <td className="py-2 pr-3">{row.avgGrade != null ? row.avgGrade : '—'}</td>
+                    <td className="py-2">{row.lastActivityAt ? format(new Date(row.lastActivityAt), 'dd.MM.yyyy HH:mm') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Список для мобильных */}
+          <div className="md:hidden divide-y divide-gray-100">
+            {items.map(row => (
+              <div key={row.studentId} className="py-3">
+                <div className="font-medium">{row.studentName || 'Без имени'}</div>
+                <div className="text-sm text-gray-600">Кол-во уроков: {row.lessonsWithTeacher ?? 0}</div>
+                <div className="text-sm text-gray-600">Выполненные ДЗ: {row.submittedAssignments ?? 0}</div>
+                <div className="text-sm text-gray-600">Средняя оценка: {row.avgGrade != null ? row.avgGrade : '—'}</div>
+                <div className="text-sm text-gray-600">Последняя активность: {row.lastActivityAt ? format(new Date(row.lastActivityAt), 'dd.MM.yyyy HH:mm') : '—'}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Пагинация */}
+          <div className="mt-4 flex items-center justify-between">
+            <button
+              className="rounded-xl border border-gray-300 py-2 px-3 text-sm disabled:opacity-50"
+              disabled={!canPrev}
+              onClick={() => setOffset(prev => Math.max(0, prev - limit))}
+            >Назад</button>
+            <div className="text-xs text-gray-500">Показано {Math.min(total, offset + 1)}–{Math.min(total, offset + limit)} из {total}</div>
+            <button
+              className="rounded-xl border border-gray-300 py-2 px-3 text-sm disabled:opacity-50"
+              disabled={!canNext}
+              onClick={() => setOffset(prev => prev + limit)}
+            >Вперёд</button>
+          </div>
+        </div>
+      )}
+    </Section>
   )
 }
 
