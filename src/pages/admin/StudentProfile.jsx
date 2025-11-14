@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
 import Loading from '../../components/ui/Loading'
 import toast from '@/lib/safeToast'
@@ -14,6 +14,7 @@ function addDays(date, n) { const d = new Date(date); d.setDate(d.getDate() + n)
 
 export default function StudentProfile() {
   const { id } = useParams()
+  const location = useLocation()
   const [student, setStudent] = useState(null)
   const [email, setEmail] = useState(null)
   const [subscription, setSubscription] = useState(null)
@@ -77,6 +78,15 @@ export default function StudentProfile() {
   }
 
   useEffect(() => { load() }, [id])
+
+  // Auto-open subscription modal if query contains ?open=sub or ?open=subscription
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || '')
+    const open = String(params.get('open') || '').toLowerCase()
+    if (open === 'sub' || open === 'subscription') {
+      setEditing(true)
+    }
+  }, [location.search])
 
   const saveSubscription = async () => {
     try {
