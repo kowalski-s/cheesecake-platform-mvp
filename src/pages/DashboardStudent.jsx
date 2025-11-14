@@ -4,6 +4,8 @@ import { format } from 'date-fns'
 import toast from '@/lib/safeToast'
 import PageHeader from '../components/ui/PageHeader'
 import Section from '../components/ui/Section'
+import { getStudentAnalytics } from '@/api/studentAnalytics'
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from 'recharts'
 
 export default function DashboardStudent() {
   // TODO: вывести карточки "Абонемент/Осталось занятий", "Ближайший урок", "Прогресс", кнопки в материалы и ДЗ
@@ -13,6 +15,8 @@ export default function DashboardStudent() {
   const [progress, setProgress] = useState([])
   const [teacher, setTeacher] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [analytics, setAnalytics] = useState(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
@@ -68,6 +72,19 @@ export default function DashboardStudent() {
           setPast((lessons || []).filter(l => new Date(l.start_at).getTime() < now))
           setProgress(prog || [])
 
+          // Загружаем аналитику прогресса
+          try {
+            setAnalyticsLoading(true)
+            const a = await getStudentAnalytics(studentData?.id)
+            setAnalytics(a)
+          } catch (e) {
+            console.error('Error loading analytics:', e)
+            if (typeof toast.error === 'function') toast.error('Не удалось загрузить аналитику')
+            setAnalytics(null)
+          } finally {
+            setAnalyticsLoading(false)
+          }
+
           // Напоминание: ближайший урок в течение 3 часов
           const nextLesson = (lessons || []).find(l => new Date(l.start_at).getTime() >= now)
           if (nextLesson) {
@@ -121,39 +138,14 @@ export default function DashboardStudent() {
     )
   }
 
-  // Если нет данных, показываем красивую заглушку вместо пустой страницы
-  const hasNoData = !subscription && upcoming.length === 0 && past.length === 0 && progress.length === 0
-
-  if (hasNoData) {
-    return (
-      <div className="space-y-6">
-        <PageHeader 
-          title="Личный кабинет" 
-          description="Добро пожаловать в Cheesecake School!"
-        />
-        
-        <div className="card p-8 text-center">
-          <div className="mb-6 mx-auto h-16 w-16 rounded-full bg-brand/10 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold mb-2">Добро пожаловать в Cheesecake School!</h2>
-          <p className="text-gray-600 mb-6">Похоже, у вас пока нет активных занятий или абонемента.</p>
-          <div className="flex justify-center gap-4">
-            <a href="/schedule" className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium bg-brand text-white hover:bg-brand-muted">
-              Посмотреть расписание
-            </a>
-            <a href="/materials" className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50">
-              Учебные материалы
-            </a>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  // Ранее здесь был ранний возврат при полном отсутствии данных.
+  // Теперь секция «Аналитика прогресса» всегда рендерится, даже без абонемента/уроков.
 
   const remaining = subscription?.remaining_lessons ?? 0
+  const fmtDateTime = (iso) => {
+    if (!iso) return 'Пока нет активности'
+    try { return format(new Date(iso), 'dd.MM HH:mm') } catch { return '—' }
+  }
 
   return (
     <div className="space-y-6">
@@ -209,8 +201,87 @@ export default function DashboardStudent() {
               <span>Всего: {past.length + upcoming.length}</span>
             </div>
           </div>
-        </Section>
+      </Section>
       </div>
+
+      {/* Аналитика прогресса */}
+      <Section title="Аналитика прогресса">
+        {analyticsLoading && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+            <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+            <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+            <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+          </div>
+        )}
+
+        {!analyticsLoading && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              {/* Уроки */}
+              <div className="card p-4">
+                <div className="text-sm text-gray-500 mb-1">Уроки</div>
+                <div className="font-semibold">Пройдено {analytics?.completedLessons ?? 0} из {analytics?.lessonsTotal ?? 0}</div>
+                <div className="mt-2 h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-brand" style={{ width: `${analytics?.progressPercent ?? 0}%` }}></div>
+                </div>
+              </div>
+
+              {/* Домашние задания */}
+              <div className="card p-4">
+                <div className="text-sm text-gray-500 mb-1">Домашние задания</div>
+                <div className="font-semibold">{analytics?.completedAssignments ?? 0} / {analytics?.totalAssignments ?? 0}</div>
+                <div className="text-xs text-gray-500 mt-1">отправленные ДЗ</div>
+              </div>
+
+              {/* Средняя оценка */}
+              <div className="card p-4">
+                <div className="text-sm text-gray-500 mb-1">Средняя оценка</div>
+                <div className="font-semibold">{analytics?.averageGrade != null ? analytics.averageGrade : '—'}</div>
+              </div>
+
+              {/* Последняя активность */}
+              <div className="card p-4">
+                <div className="text-sm text-gray-500 mb-1">Последняя активность</div>
+                <div className="font-semibold">{fmtDateTime(analytics?.lastActivityAt)}</div>
+              </div>
+            </div>
+
+            {/* График оценок по времени */}
+            <div className="card p-4">
+              <div className="text-sm text-gray-500 mb-3">Оценки по времени</div>
+              {analytics?.gradesTimeline?.length > 0 ? (
+                <div className="w-full" style={{ height: 280 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analytics.gradesTimeline} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                      <XAxis dataKey="date" tickFormatter={(v) => { try { return format(new Date(v), 'dd.MM') } catch { return '' } }} />
+                      <YAxis allowDecimals domain={[0, 'auto']} />
+                      <Tooltip formatter={(value) => [value, 'Оценка']} labelFormatter={(label) => { try { return format(new Date(label), 'dd.MM.yyyy HH:mm') } catch { return label } }}
+                        content={({ label, payload }) => {
+                          const p = (payload || [])[0]
+                          const grade = p?.value
+                          const title = p?.payload?.title
+                          const dateStr = label ? format(new Date(label), 'dd.MM.yyyy HH:mm') : ''
+                          return (
+                            <div className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
+                              <div className="font-medium">{title}</div>
+                              <div className="text-gray-600">Оценка: {grade}</div>
+                              <div className="text-gray-400">{dateStr}</div>
+                            </div>
+                          )
+                        }}
+                      />
+                      <Line type="monotone" dataKey="grade" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500">Пока нет данных</div>
+              )}
+            </div>
+          </div>
+        )}
+      </Section>
       
       {/* Блок с преподавателем */}
       {teacher && (

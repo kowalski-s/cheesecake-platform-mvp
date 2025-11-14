@@ -9,6 +9,9 @@ import Loading from '../components/ui/Loading'
 import SubscriptionCard from '../components/student/SubscriptionCard'
 import NextLessonCard from '../components/student/NextLessonCard'
 import ProgressCard from '../components/student/ProgressCard'
+import { getStudentAnalytics } from '@/api/studentAnalytics'
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
+import { format } from 'date-fns'
 
 export default function Students() {
   const { session, profile } = useAuth()
@@ -25,6 +28,9 @@ export default function Students() {
   const [myId, setMyId] = useState(null)
   const [lessonDuration, setLessonDuration] = useState(null)
   const [progress, setProgress] = useState({ completed: 0, total: 0, pct: 0 })
+  const [analytics, setAnalytics] = useState(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(true)
+  const [analyticsError, setAnalyticsError] = useState(null)
 
   // Глобальный перехватчик ошибок: логируем стек, чтобы понять источник
   useEffect(() => {
@@ -136,6 +142,22 @@ export default function Students() {
         const pct = total ? Math.round((completed/total)*100) : 0
         setProgress({ completed, total, pct })
 
+        // 4) Загружаем аналитику прогресса (не скрываем секцию при ошибке)
+        try {
+          setAnalyticsLoading(true)
+          setAnalyticsError(null)
+          const a = await getStudentAnalytics(myStudentId)
+          setAnalytics(a)
+        } catch (e) {
+          console.error('ERR_LOAD_ANALYTICS', e, e?.stack)
+          setAnalyticsError(e)
+          if (toast && typeof toast.error === 'function') {
+            toast.error('Не удалось загрузить аналитику прогресса')
+          }
+        } finally {
+          setAnalyticsLoading(false)
+        }
+
       } catch (e) {
         console.error('ERR_LOAD_STUDENT', e, e?.stack)
         if (toast && typeof toast.error === 'function') {
@@ -194,6 +216,78 @@ export default function Students() {
             percent={progress.pct}
             emptyText="Прогресс появится после первых уроков"
           />
+        </div>
+      </Section>
+
+      {/* Аналитика прогресса — всегда видна, даже при загрузке/ошибке/пустых данных */}
+      <Section>
+        <h2 className="text-lg font-semibold mb-3">Аналитика прогресса</h2>
+
+        {/* Метрики: скелетоны при загрузке */}
+        {analyticsLoading ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+            <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+            <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+            <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            {/* Уроки */}
+            <div className="card p-4">
+              <div className="text-sm text-gray-500 mb-1">Уроки</div>
+              <div className="font-semibold">Пройдено {analytics?.completedLessons ?? 0} из {analytics?.lessonsTotal ?? 0}</div>
+              <div className="mt-2 h-2 w-full bg-gray-200 rounded-full overflow-hidden" aria-label="Прогресс по урокам">
+                <div className="h-full bg-brand" style={{ width: `${analytics?.progressPercent ?? 0}%` }}></div>
+              </div>
+            </div>
+
+            {/* Домашние задания */}
+            <div className="card p-4">
+              <div className="text-sm text-gray-500 mb-1">Домашние задания</div>
+              <div className="font-semibold">{analytics?.completedAssignments ?? 0} / {analytics?.totalAssignments ?? 0}</div>
+              <div className="text-xs text-gray-500 mt-1">отправленные ДЗ</div>
+            </div>
+
+            {/* Средняя оценка */}
+            <div className="card p-4">
+              <div className="text-sm text-gray-500 mb-1">Средняя оценка</div>
+              <div className="font-semibold">{analytics?.averageGrade != null ? analytics.averageGrade : '—'}</div>
+            </div>
+
+            {/* Последняя активность */}
+            <div className="card p-4">
+              <div className="text-sm text-gray-500 mb-1">Последняя активность</div>
+              <div className="font-semibold">{analytics?.lastActivityAt ? format(new Date(analytics.lastActivityAt), 'dd.MM.yyyy HH:mm') : '—'}</div>
+            </div>
+          </div>
+        )}
+
+        {/* График оценок */}
+        <div className="mt-4">
+          {analyticsLoading ? (
+            <div className="card p-4">
+              <div className="h-72 bg-gray-100 animate-pulse rounded"></div>
+            </div>
+          ) : (Array.isArray(analytics?.gradesTimeline) && analytics.gradesTimeline.length > 0 ? (
+            <div className="card p-4">
+              <div style={{ width: '100%', height: 280 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={analytics.gradesTimeline} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tickFormatter={(v) => format(new Date(v), 'dd.MM')} />
+                    <YAxis domain={[0, 10]} tickCount={6} />
+                    <Tooltip formatter={(value, name, props) => [value, props.payload.title]} labelFormatter={(label) => format(new Date(label), 'dd.MM.yyyy HH:mm')} />
+                    <Line type="monotone" dataKey="grade" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ) : (
+            <div className="card p-4">
+              <div className="text-sm text-gray-500">Пока нет данных</div>
+            </div>
+          ))}
         </div>
       </Section>
 
