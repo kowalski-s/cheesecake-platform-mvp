@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import Loading from '../components/ui/Loading'
 import { useAuth } from '../context/AuthContext'
 import { format } from 'date-fns'
+import toast from '@/lib/safeToast'
 
 export default function AdminLessonsPage() {
   const { role, user } = useAuth()
@@ -15,7 +16,6 @@ export default function AdminLessonsPage() {
   const [teacherSelfId, setTeacherSelfId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
   const [creating, setCreating] = useState({
     title: '',
     class_name: '',
@@ -114,17 +114,17 @@ export default function AdminLessonsPage() {
         status: creating.status || 'planned',
       }
       if (!payload.title || !payload.teacher_id || !payload.student_id) {
-        setToast({ type: 'error', msg: 'Укажите тему, преподавателя и ученика' })
+        toast.error('Укажите тему, преподавателя и ученика')
         return
       }
       const { error: insError } = await supabase.from('lessons').insert(payload)
       if (insError) throw insError
-      setToast({ type: 'success', msg: 'Занятие создано' })
+      toast.success('Занятие создано')
       setCreating({ title: '', class_name: '', start_at: '', duration: '', teacher_id: '', student_id: '', notes: '', status: 'planned' })
       await load()
     } catch (e) {
       console.error('create lesson failed', e)
-      setToast({ type: 'error', msg: e?.message || 'Не удалось создать занятие' })
+      toast.error(e?.message || 'Не удалось создать занятие')
     }
   }
 
@@ -135,7 +135,7 @@ export default function AdminLessonsPage() {
       setLessons(lessons.map(l => l.id === lessonId ? { ...l, status } : l))
     } catch (e) {
       console.error('update status failed', e)
-      setToast({ type: 'error', msg: e?.message || 'Не удалось обновить статус' })
+      toast.error(e?.message || 'Не удалось обновить статус')
     }
   }
 
@@ -144,10 +144,10 @@ export default function AdminLessonsPage() {
       const { error: delError } = await supabase.from('lessons').delete().eq('id', lessonId)
       if (delError) throw delError
       setLessons(lessons.filter(l => l.id !== lessonId))
-      setToast({ type: 'success', msg: 'Занятие удалено' })
+      toast.success('Занятие удалено')
     } catch (e) {
       console.error('delete lesson failed', e)
-      setToast({ type: 'error', msg: e?.message || 'Не удалось удалить занятие' })
+      toast.error(e?.message || 'Не удалось удалить занятие')
     }
   }
 
@@ -303,9 +303,7 @@ export default function AdminLessonsPage() {
             </div>
           </section>
 
-          {toast && (
-            <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast?.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast?.msg}</div>
-          )}
+
         </>
       )}
     </div>

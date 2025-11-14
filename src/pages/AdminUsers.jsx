@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import Loading from '../components/ui/Loading'
 import InviteUserModal from '../components/InviteUserModal'
+import toast from '@/lib/safeToast'
 
 export default function AdminUsersPage() {
   const { role } = useAuth()
@@ -14,7 +15,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
-  const [toast, setToast] = useState(null)
+  
   const [createForm, setCreateForm] = useState({ email: '', role: 'student' })
 
   const load = async () => {
@@ -59,11 +60,11 @@ export default function AdminUsersPage() {
       })
       const body = await res.json().catch(() => null)
       if (!res.ok || !body?.ok) throw new Error(body?.error || `Update role failed (${res.status})`)
-      setToast({ type: 'success', msg: 'Роль обновлена' })
+      toast.success('Роль обновлена')
       await load()
     } catch (e) {
       console.error('update_role failed', e)
-      setToast({ type: 'error', msg: `Не удалось изменить роль: ${e?.message || 'неизвестная ошибка'}` })
+      toast.error(`Не удалось изменить роль: ${e?.message || 'неизвестная ошибка'}`)
     }
   }
 
@@ -71,7 +72,7 @@ export default function AdminUsersPage() {
     try {
       const email = createForm.email.trim()
       const role = createForm.role.trim()
-      if (!email || !role) { setToast({ type: 'error', msg: 'Введите email и роль' }); return }
+      if (!email || !role) { toast.error('Введите email и роль'); return }
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
       const res = await fetch('/.netlify/functions/admin-users', {
@@ -84,12 +85,12 @@ export default function AdminUsersPage() {
       })
       const body = await res.json().catch(() => null)
       if (!res.ok || !body?.ok) throw new Error(body?.error || `Create failed (${res.status})`)
-      setToast({ type: 'success', msg: `Создан: ${body?.data?.email} (${body?.data?.role})` })
+      toast.success(`Создан: ${body?.data?.email} (${body?.data?.role})`)
       setCreateForm({ email: '', role: 'student' })
       await load()
     } catch (e) {
       console.error('create user failed', e)
-      setToast({ type: 'error', msg: `Создание не удалось: ${e?.message || 'неизвестная ошибка'}` })
+      toast.error(`Создание не удалось: ${e?.message || 'неизвестная ошибка'}`)
     }
   }
 
@@ -108,14 +109,14 @@ export default function AdminUsersPage() {
       const ok = res.ok
       if (!ok) {
         const msg = await res.text().catch(() => null)
-        setToast({ type: 'error', msg: `Удаление не удалось${msg ? `: ${msg}` : ''}` })
+        toast.error(`Удаление не удалось${msg ? `: ${msg}` : ''}`)
         return
       }
-      setToast({ type: 'success', msg: 'Пользователь удалён' })
+      toast.success('Пользователь удалён')
       await load()
     } catch (e) {
       console.error('delete user failed', e)
-      setToast({ type: 'error', msg: `Удаление не удалось: ${e?.message || 'неизвестная ошибка'}` })
+      toast.error(`Удаление не удалось: ${e?.message || 'неизвестная ошибка'}`)
     }
   }
 
@@ -207,11 +208,8 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      <InviteUserModal isOpen={inviteOpen} onClose={() => setInviteOpen(false)} defaultRole="teacher" onSuccess={() => { setInviteOpen(false); load(); setToast({ type: 'success', msg: 'Приглашение отправлено' }) }} />
+      <InviteUserModal isOpen={inviteOpen} onClose={() => setInviteOpen(false)} defaultRole="teacher" onSuccess={() => { setInviteOpen(false); load(); toast.success('Приглашение отправлено') }} />
 
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
-      )}
     </div>
   )
 }

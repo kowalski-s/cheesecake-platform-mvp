@@ -82,7 +82,7 @@ export async function gradeSubmission(sb, { assignmentId, studentId, grade, feed
 export async function fetchLessons(sb, { start, end, teacherIds = [] }) {
   let q = sb
     .from('lessons')
-    .select('id, start_at, end_at, duration_min, status, comment, teacher_id, student_id, student:students(id, display_name), teacher:teachers(id, display_name)')
+    .select('id, title, start_at, end_at, duration_min, status, comment, teacher_id, student_id, student:students(id, display_name), teacher:teachers(id, display_name)')
     .gte('start_at', start)
     .lt('start_at', end)
 
@@ -94,8 +94,8 @@ export async function fetchLessons(sb, { start, end, teacherIds = [] }) {
   return data || []
 }
 
-export async function createLesson(sb, { start_at, end_at = null, duration_min = null, status = 'planned', comment = null, teacher_id, student_id }) {
-  const payload = { start_at, status, comment, teacher_id, student_id }
+export async function createLesson(sb, { title = null, start_at, end_at = null, duration_min = null, status = 'planned', comment = null, teacher_id, student_id }) {
+  const payload = { title, start_at, status, comment, teacher_id, student_id }
   if (end_at) payload.end_at = end_at
   if (duration_min != null) payload.duration_min = duration_min
   const { data, error } = await sb

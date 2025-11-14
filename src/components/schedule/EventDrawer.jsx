@@ -6,6 +6,7 @@ import { formatLocalDateTimeInput, parseLocalDateTimeInput, addMinutes, toSupaba
 export default function EventDrawer({ open, onClose, date, teachers = [], students = [], editing = null, onSaved = () => {}, onDeleted = () => {} }) {
   const [teacherId, setTeacherId] = useState(editing?.teacher_id || teachers[0]?.id || null)
   const [studentId, setStudentId] = useState(editing?.student_id || null)
+  const [title, setTitle] = useState(editing?.title || '')
   const [startAt, setStartAt] = useState(() => {
     if (editing?.start_at) return formatLocalDateTimeInput(new Date(editing.start_at))
     return formatLocalDateTimeInput(new Date(date))
@@ -20,6 +21,7 @@ export default function EventDrawer({ open, onClose, date, teachers = [], studen
     if (!open) return
     setTeacherId(editing?.teacher_id || teachers[0]?.id || null)
     setStudentId(editing?.student_id || null)
+    setTitle(editing?.title || '')
     setStartAt(editing?.start_at ? formatLocalDateTimeInput(new Date(editing.start_at)) : formatLocalDateTimeInput(new Date(date)))
     setDurationMin(editing?.duration_min ?? 60)
     setStatus(editing?.status || 'planned')
@@ -48,11 +50,12 @@ export default function EventDrawer({ open, onClose, date, teachers = [], studen
       if ((conflicts.teacher?.length || 0) > 0) { setError('Конфликт по времени у преподавателя'); return }
       if ((conflicts.student?.length || 0) > 0) { setError('Конфликт по времени у ученика'); return }
 
+      const normalizedTitle = (title?.trim() || '')
       if (editing?.id) {
-        const saved = await updateLesson(supabase, editing.id, { teacher_id: teacherId, student_id: studentId, start_at: toSupabaseTimestamptz(startDate), duration_min: durationMin, status, comment })
+        const saved = await updateLesson(supabase, editing.id, { title: normalizedTitle || null, teacher_id: teacherId, student_id: studentId, start_at: toSupabaseTimestamptz(startDate), duration_min: durationMin, status, comment })
         onSaved(saved)
       } else {
-        const saved = await createLesson(supabase, { teacher_id: teacherId, student_id: studentId, start_at: toSupabaseTimestamptz(startDate), duration_min: durationMin, status, comment })
+        const saved = await createLesson(supabase, { title: normalizedTitle || null, teacher_id: teacherId, student_id: studentId, start_at: toSupabaseTimestamptz(startDate), duration_min: durationMin, status, comment })
         onSaved(saved)
       }
       onClose()
@@ -105,6 +108,9 @@ export default function EventDrawer({ open, onClose, date, teachers = [], studen
             <option key={s.id} value={s.id}>{s.display_name ?? s.id}</option>
           ))}
         </select>
+
+        <label className="block text-sm mt-2">Название занятия</label>
+        <input className="w-full border rounded p-2" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="например: Урок" />
 
         <label className="block text-sm mt-2">Дата и время начала</label>
         <input className="w-full border rounded p-2" type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} />

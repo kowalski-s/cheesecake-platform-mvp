@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import Loading from '../components/ui/Loading'
+import toast from '@/lib/safeToast'
 
 export default function AdminMaterialsPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({ title: '', description: '', storage_path: '' })
 
@@ -38,8 +38,8 @@ export default function AdminMaterialsPage() {
 
   const save = async () => {
     try {
-      if (!form.title.trim()) { setToast({ type: 'error', msg: 'Введите название' }); return }
-      if (!isValidPath(form.storage_path)) { setToast({ type: 'error', msg: 'Укажите путь в хранилище (storage_path)' }); return }
+      if (!form.title.trim()) { toast.error('Введите название'); return }
+      if (!isValidPath(form.storage_path)) { toast.error('Укажите путь в хранилище (storage_path)'); return }
       const payload = { title: form.title.trim(), description: form.description || null, storage_path: form.storage_path.trim() }
       if (editing?.id) {
         const { error } = await supabase.from('materials').update(payload).eq('id', editing.id)
@@ -50,11 +50,11 @@ export default function AdminMaterialsPage() {
         const { error } = await supabase.from('materials').insert({ ...payload, owner_id })
         if (error) throw error
       }
-      setToast({ type: 'success', msg: 'Сохранено' })
+      toast.success('Сохранено')
       setEditing(null)
       await load()
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Ошибка сохранения' })
+      toast.error(e?.message || 'Ошибка сохранения')
     }
   }
 
@@ -62,10 +62,10 @@ export default function AdminMaterialsPage() {
     try {
       const { error } = await supabase.from('materials').delete().eq('id', id)
       if (error) throw error
-      setToast({ type: 'success', msg: 'Удалено' })
+      toast.success('Удалено')
       await load()
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Ошибка удаления' })
+      toast.error(e?.message || 'Ошибка удаления')
     }
   }
 
@@ -140,9 +140,6 @@ export default function AdminMaterialsPage() {
         </div>
       )}
 
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
-      )}
     </div>
   )
 }

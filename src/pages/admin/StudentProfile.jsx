@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
 import Loading from '../../components/ui/Loading'
+import toast from '@/lib/safeToast'
 
 function daysUntil(date) {
   if (!date) return null
@@ -19,7 +20,6 @@ export default function StudentProfile() {
   const [lessons, setLessons] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
   const [editing, setEditing] = useState(false)
   const [subForm, setSubForm] = useState({ remaining_lessons: 0, endDate: '' })
 
@@ -92,14 +92,12 @@ export default function StudentProfile() {
         const { error } = await supabase.from('subscriptions').insert({ user_id: student.user_id, ...payload })
         if (error) throw error
       }
-      setToast({ type: 'success', msg: 'Абонемент обновлён' })
+      toast.success('Абонемент обновлён')
       setEditing(false)
       await load()
     } catch (e) {
       console.error('save subscription failed', e)
-      setToast({ type: 'error', msg: `Ошибка сохранения абонемента: ${e?.message || 'неизвестная ошибка'}` })
-    } finally {
-      setTimeout(() => setToast(null), 3000)
+      toast.error(`Ошибка сохранения абонемента: ${e?.message || 'неизвестная ошибка'}`)
     }
   }
 
@@ -188,9 +186,7 @@ export default function StudentProfile() {
         </div>
       )}
 
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
-      )}
+      
     </div>
   )
 }

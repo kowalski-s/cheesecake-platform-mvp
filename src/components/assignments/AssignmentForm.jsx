@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { getMyTeacherId } from '@/lib/api'
+import toast from '@/lib/safeToast'
 
 export default function AssignmentForm({ onCreated, studentId }) {
   const [materials, setMaterials] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
   const [form, setForm] = useState({ title: '', description: '', due_date: '', material_id: '' })
 
   useEffect(() => {
@@ -29,9 +29,9 @@ export default function AssignmentForm({ onCreated, studentId }) {
   const submit = async (e) => {
     e.preventDefault()
     try {
-      if (!form.title.trim()) { setToast({ type: 'error', msg: 'Введите название' }); return }
+      if (!form.title.trim()) { toast.error('Введите название'); return }
       const teacher_id = await getMyTeacherId(supabase)
-      if (!teacher_id) { setToast({ type: 'error', msg: 'Не найден профиль преподавателя' }); return }
+      if (!teacher_id) { toast.error('Не найден профиль преподавателя'); return }
       const payload = {
         title: form.title.trim(),
         description: form.description?.trim() || null,
@@ -64,13 +64,11 @@ export default function AssignmentForm({ onCreated, studentId }) {
         if (upErr) throw upErr
       }
 
-      setToast({ type: 'success', msg: 'Задание создано' })
+      toast.success('Задание создано')
       setForm({ title: '', description: '', due_date: '', material_id: '' })
       if (typeof onCreated === 'function') onCreated({ id: assignmentId })
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Не удалось создать задание' })
-    } finally {
-      setTimeout(() => setToast(null), 2500)
+      toast.error(e?.message || 'Не удалось создать задание')
     }
   }
 
@@ -105,9 +103,6 @@ export default function AssignmentForm({ onCreated, studentId }) {
           <button className="btn-primary">Создать</button>
         </div>
       </form>
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
-      )}
       {loading && <div className="mt-2 text-sm text-gray-500">Загрузка материалов…</div>}
       {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
     </section>

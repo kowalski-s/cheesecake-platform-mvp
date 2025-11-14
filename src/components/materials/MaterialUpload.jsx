@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
+import toast from '@/lib/safeToast'
 
 export default function MaterialUpload({ onUploaded }) {
   const { role } = useAuth()
@@ -11,7 +12,6 @@ export default function MaterialUpload({ onUploaded }) {
   const [description, setDescription] = useState('')
   const [className, setClassName] = useState('')
   const [visibility, setVisibility] = useState('public')
-  const [toast, setToast] = useState(null)
   const dropRef = useRef(null)
 
   useEffect(() => {
@@ -53,7 +53,7 @@ export default function MaterialUpload({ onUploaded }) {
   const onSubmit = async (e) => {
     e.preventDefault()
     if (!canUpload) return
-    if (!file) { setToast({ type: 'error', msg: 'Выберите файл' }); return }
+    if (!file) { toast.error('Выберите файл'); return }
     try {
       await ensureBuckets()
       const { data: { user } } = await supabase.auth.getUser()
@@ -80,14 +80,12 @@ export default function MaterialUpload({ onUploaded }) {
 
       const { error: insErr } = await supabase.from('materials').insert(payload)
       if (insErr) throw insErr
-      setToast({ type: 'success', msg: 'Материал загружен' })
+      toast.success('Материал загружен')
       setFile(null); setTitle(''); setDescription(''); setClassName(''); setVisibility('public')
       if (typeof onUploaded === 'function') onUploaded()
     } catch (err) {
       console.error('upload material failed', err)
-      setToast({ type: 'error', msg: err?.message || 'Не удалось загрузить материал' })
-    } finally {
-      setTimeout(() => setToast(null), 2500)
+      toast.error(err?.message || 'Не удалось загрузить материал')
     }
   }
 
@@ -129,9 +127,6 @@ export default function MaterialUpload({ onUploaded }) {
         </div>
       </form>
 
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
-      )}
     </section>
   )
 }

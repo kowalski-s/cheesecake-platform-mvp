@@ -185,18 +185,29 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
             </NavLink>
           )}
           {(["teacher", "admin"].includes((role || "").trim().toLowerCase())) && (
-            <NavLink
-              to="/teacher/homeworks"
-              className={({ isActive }) =>
-                `rounded-lg px-3 py-2 transition flex items-center justify-between ${isActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`
-              }
-              aria-current={({ isActive }) => (isActive ? "page" : undefined)}
-            >
-              <span>Проверка ДЗ</span>
-              {pendingCount > 0 && (
-                <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-xs px-2 py-0.5">{pendingCount}</span>
-              )}
-            </NavLink>
+            <>
+              <NavLink
+                to="/teacher/schedule"
+                className={({ isActive }) =>
+                  `rounded-lg px-3 py-2 transition ${isActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`
+                }
+                aria-current={({ isActive }) => (isActive ? "page" : undefined)}
+              >
+                Календарь занятий
+              </NavLink>
+              <NavLink
+                to="/teacher/homeworks"
+                className={({ isActive }) =>
+                  `rounded-lg px-3 py-2 transition flex items-center justify-between ${isActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`
+                }
+                aria-current={({ isActive }) => (isActive ? "page" : undefined)}
+              >
+                <span>Проверка ДЗ</span>
+                {pendingCount > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-xs px-2 py-0.5">{pendingCount}</span>
+                )}
+              </NavLink>
+            </>
           )}
           <NavLink
             to="/materials"

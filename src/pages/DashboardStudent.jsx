@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { format } from 'date-fns'
+import toast from '@/lib/safeToast'
 import PageHeader from '../components/ui/PageHeader'
 import Section from '../components/ui/Section'
 
@@ -48,10 +49,15 @@ export default function DashboardStudent() {
           }
           
           // Получаем остальные данные
-          const [{ data: subs }, { data: lessons }, { data: prog }] = await Promise.all([
+          const [{ data: subs }, { data: lessons }, { data: prog }, { data: targets }] = await Promise.all([
             supabase.from('subscriptions').select('*').eq('user_id', user.id).eq('active', true).maybeSingle(),
             supabase.from('lessons').select('id, title, start_at, status, teacher:teachers(display_name)').eq('student_id', studentData?.id ?? '00000000-0000-0000-0000-000000000000').order('start_at', { ascending: true }),
             supabase.from('progress').select('*').eq('student_id', studentData?.id ?? '00000000-0000-0000-0000-000000000000').order('updated_at', { ascending: false }),
+            supabase.from('assignment_targets').select(`
+              assignments:assignments!assignment_targets_assignment_id_fkey (
+                id, title, due_date
+              )
+            `).eq('student_id', studentData?.id ?? '00000000-0000-0000-0000-000000000000').order('assignments(due_date)', { ascending: true })
           ])
 
           setSubscription(subs || null)
@@ -61,6 +67,33 @@ export default function DashboardStudent() {
           setUpcoming((lessons || []).filter(l => new Date(l.start_at).getTime() >= now))
           setPast((lessons || []).filter(l => new Date(l.start_at).getTime() < now))
           setProgress(prog || [])
+
+          // Напоминание: ближайший урок в течение 3 часов
+          const nextLesson = (lessons || []).find(l => new Date(l.start_at).getTime() >= now)
+          if (nextLesson) {
+            const startTs = new Date(nextLesson.start_at).getTime()
+            const diffMs = startTs - now
+            const threeHoursMs = 3 * 60 * 60 * 1000
+            if (diffMs > 0 && diffMs <= threeHoursMs) {
+              const hh = String(new Date(nextLesson.start_at).getHours()).padStart(2, '0')
+              const mm = String(new Date(nextLesson.start_at).getMinutes()).padStart(2, '0')
+              toast.info(`У тебя сегодня урок в ${hh}:${mm}`)
+            }
+          }
+
+          // Напоминания: ближайшие дедлайны ДЗ в течение 24 часов
+          const assignments = (targets || []).map(t => t.assignments).filter(Boolean)
+          const soon = assignments.filter(a => {
+            const due = a?.due_date ? new Date(a.due_date).getTime() : null
+            if (!due) return false
+            const diff = due - now
+            return diff > 0 && diff <= 24 * 60 * 60 * 1000
+          })
+          soon.slice(0, 3).forEach(a => {
+            const due = new Date(a.due_date).getTime()
+            const hours = Math.max(1, Math.ceil((due - now) / (60 * 60 * 1000)))
+            toast.info(`Дедлайн по ДЗ “${a.title}” через ${hours} ч.`)
+          })
         } catch (error) {
           console.error('Error loading student data:', error)
           // Устанавливаем пустые данные, чтобы показать заглушки

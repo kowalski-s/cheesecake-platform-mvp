@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 import AssignmentTargetsModal from './AssignmentTargetsModal'
+import toast from '@/lib/safeToast'
 
 export default function AssignmentsList({ mode = 'teacher', onSelectAssignment }) {
   const { role } = useAuth()
@@ -13,7 +14,6 @@ export default function AssignmentsList({ mode = 'teacher', onSelectAssignment }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [assigning, setAssigning] = useState(null)
-  const [toast, setToast] = useState(null)
 
   // For teacher, also load students to compute not-submitted count
   const [students, setStudents] = useState([])
@@ -107,11 +107,8 @@ export default function AssignmentsList({ mode = 'teacher', onSelectAssignment }
         visible={!!assigning}
         assignment={assigning}
         onClose={() => setAssigning(null)}
-        onAssigned={() => setToast({ type: 'success', msg: 'Задание назначено' })}
+        onAssigned={() => toast.success('Задание назначено')}
       />
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast?.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast?.msg}</div>
-      )}
     </section>
   )
 }

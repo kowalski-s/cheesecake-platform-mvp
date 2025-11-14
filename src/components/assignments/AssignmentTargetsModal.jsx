@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import toast from '@/lib/safeToast'
 
 export default function AssignmentTargetsModal({ visible, assignment, onClose, onAssigned }) {
   const [students, setStudents] = useState([])
   const [selected, setSelected] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
 
   useEffect(() => {
     const loadStudents = async () => {
@@ -36,17 +36,15 @@ export default function AssignmentTargetsModal({ visible, assignment, onClose, o
   const confirm = async () => {
     try {
       const ids = Object.entries(selected).filter(([, v]) => v).map(([k]) => k)
-      if (!assignment?.id || ids.length === 0) { setToast({ type: 'error', msg: 'Выберите хотя бы одного ученика' }); return }
+      if (!assignment?.id || ids.length === 0) { toast.error('Выберите хотя бы одного ученика'); return }
       const rows = ids.map(sid => ({ assignment_id: assignment.id, student_id: sid }))
       const { error: upErr } = await supabase.from('assignment_targets').upsert(rows, { onConflict: 'assignment_id,student_id', returning: 'minimal' })
       if (upErr) throw upErr
-      setToast({ type: 'success', msg: 'Назначено' })
-      setTimeout(() => setToast(null), 2000)
+      toast.success('Назначено')
       if (typeof onAssigned === 'function') onAssigned(rows)
       if (typeof onClose === 'function') onClose()
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Не удалось назначить' })
-      setTimeout(() => setToast(null), 2500)
+      toast.error(e?.message || 'Не удалось назначить')
     }
   }
 
@@ -80,9 +78,6 @@ export default function AssignmentTargetsModal({ visible, assignment, onClose, o
             <button className="btn-primary" onClick={confirm}>Назначить</button>
           </div>
         </div>
-        {toast && (
-          <div className={`absolute -top-8 right-4 rounded-xl px-3 py-1 text-sm shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
-        )}
       </div>
     </div>
   )

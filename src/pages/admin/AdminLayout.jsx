@@ -1,10 +1,10 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useState } from "react";
+import toast from '@/lib/safeToast'
 import { supabase } from "../../lib/supabaseClient";
 
 export default function AdminLayout() {
   const [seeding, setSeeding] = useState(false)
-  const [toast, setToast] = useState(null)
 
   const runSeed = async () => {
     try {
@@ -31,13 +31,12 @@ export default function AdminLayout() {
       const msg = counts
         ? `Демо-данные созданы: users(${mk(counts?.users)}), teachers(${mk(counts?.teachers)}), students(${mk(counts?.students)}), lessons(${mk(counts?.lessons)})`
         : 'Демо-данные созданы'
-      setToast({ type: 'success', msg })
+      toast.success(msg)
     } catch (e) {
       const msg = e?.message || 'Ошибка при создании демо-данных'
-      setToast({ type: 'error', msg })
+      toast.error(msg)
     } finally {
       setSeeding(false)
-      setTimeout(() => setToast(null), 3000)
     }
   }
 
@@ -130,10 +129,6 @@ export default function AdminLayout() {
       </div>
 
       <Outlet />
-
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
-      )}
     </div>
   );
 }

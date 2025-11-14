@@ -58,8 +58,9 @@ export default function DayGrid({ date, teachers = [], lessons = [], onEmptySlot
                   style={{ top: `${topPct}%`, height: `${heightPct}%` }}
                   onClick={(ev) => { ev.stopPropagation(); onLessonClick(l) }}
                 >
-                  <div className="font-medium">{l.student?.display_name ?? '—'}</div>
+                  <div className="font-medium">{l.title ?? '(без названия)'}</div>
                   <div className="opacity-70">{formatTime(s)}–{formatTime(e)}</div>
+                  <div className="opacity-70">{l.student?.display_name ?? '—'}</div>
                   {l.status === 'done' && <span className="inline-block mt-1">✔</span>}
                 </div>
               )

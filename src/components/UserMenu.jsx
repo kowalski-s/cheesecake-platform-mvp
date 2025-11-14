@@ -44,7 +44,7 @@ export default function UserMenu() {
   return (
     <div className="relative" ref={ref}>
       <button
-        className="hidden md:flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-700 font-semibold"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-700 font-semibold"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
@@ -61,7 +61,7 @@ export default function UserMenu() {
           >
             Профиль
           </NavLink>
-          <button className="block w-full text-left rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50" onClick={() => setOpen(false)}>Настройки</button>
+          <button className="block w-full text-left rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50" onClick={() => { console.log("TODO: settings"); setOpen(false) }}>Настройки</button>
           <div className="my-1 h-px bg-gray-200" />
           <NavLink
             className={({ isActive }) => `block rounded-lg px-3 py-2 ${isActive ? "bg-brand/10 text-brand font-semibold" : "text-red-600 hover:bg-red-50"}`}

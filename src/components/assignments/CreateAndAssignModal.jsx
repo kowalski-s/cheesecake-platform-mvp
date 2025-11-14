@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { getMyTeacherId } from '@/lib/api'
+import toast from '@/lib/safeToast'
 
 export default function CreateAndAssignModal({ visible, onClose, teacherId, studentId, lessonId, onCreated }) {
   const [materials, setMaterials] = useState([])
-  const [form, setForm] = useState({ title: '', description: '', due_date: '', material_id: '', assignNow: true })
+  const [form, setForm] = useState({ title: '', description: '', due_date: '', material_id: '' })
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
 
   useEffect(() => {
     const loadMaterials = async () => {
@@ -35,11 +35,10 @@ export default function CreateAndAssignModal({ visible, onClose, teacherId, stud
 
   const submit = async () => {
     try {
-      if (!form.title.trim()) { setToast({ type: 'error', msg: 'Введите название' }); return }
+      if (!form.title.trim()) { toast.error('Введите название'); return }
       setSubmitting(true)
-      setToast(null)
       const myTeacherId = await getMyTeacherId(supabase)
-      if (!myTeacherId) { setToast({ type: 'error', msg: 'Не найден профиль преподавателя' }); return }
+      if (!myTeacherId) { toast.error('Не найден профиль преподавателя'); return }
       const payload = {
         title: form.title.trim(),
         description: form.description?.trim() || null,
@@ -87,8 +86,8 @@ export default function CreateAndAssignModal({ visible, onClose, teacherId, stud
       if (selErr) throw selErr
       const assignmentId = created?.id
 
-      // Если нужно сразу назначить текущему ученику
-      if (form.assignNow && studentId && assignmentId) {
+      // Автоматически назначаем ДЗ текущему ученику урока
+      if (studentId && assignmentId) {
         const row = { assignment_id: assignmentId, student_id: studentId }
         const { error: upErr } = await supabase
           .from('assignment_targets')
@@ -96,13 +95,11 @@ export default function CreateAndAssignModal({ visible, onClose, teacherId, stud
         if (upErr) throw upErr
       }
 
-      setToast({ type: 'success', msg: 'Задание создано' })
+      toast.success('Задание создано')
       if (typeof onCreated === 'function') onCreated({ id: assignmentId })
-      setTimeout(() => setToast(null), 2000)
       if (typeof onClose === 'function') onClose()
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Не удалось создать' })
-      setTimeout(() => setToast(null), 2500)
+      toast.error(e?.message || 'Не удалось создать')
     } finally {
       setSubmitting(false)
     }
@@ -115,7 +112,7 @@ export default function CreateAndAssignModal({ visible, onClose, teacherId, stud
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg relative">
         <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600" aria-label="Закрыть">✕</button>
         <div className="p-6 space-y-4">
-          <h3 className="text-lg font-semibold">Создать и назначить ДЗ</h3>
+          <h3 className="text-lg font-semibold">Создать ДЗ</h3>
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-sm text-gray-600">Название</label>
@@ -142,19 +139,13 @@ export default function CreateAndAssignModal({ visible, onClose, teacherId, stud
                 {error && <div className="mt-1 text-xs text-red-600">{error}</div>}
               </div>
             </div>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={form.assignNow} onChange={(e) => setForm({ ...form, assignNow: e.target.checked })} />
-              <span className="text-sm text-gray-700">Сразу назначить этому ученику</span>
-            </label>
+            {/* Назначение выполняется автоматически для текущего ученика урока (MVP) */}
           </div>
           <div className="flex justify-end gap-2">
             <button className="btn-outline" onClick={onClose} disabled={submitting}>Отмена</button>
             <button className="btn-primary" onClick={submit} disabled={submitting}>Создать</button>
           </div>
         </div>
-        {toast && (
-          <div className={`absolute -top-8 right-4 rounded-xl px-3 py-1 text-sm shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
-        )}
       </div>
     </div>
   )

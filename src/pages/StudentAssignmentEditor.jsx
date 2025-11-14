@@ -99,12 +99,12 @@ export default function StudentAssignmentEditor() {
         comment,
       })
       if (upErr) throw upErr
-      const created = !submission
-      toast.success(created ? 'Домашка отправлена' : 'Домашка сохранена')
-      navigate('/assignments/student')
+      // Единообразный тост и переход на список ДЗ ученика
+      toast.success('Ответ сохранён')
+      navigate('/student/assignments')
       return
     } catch (e) {
-      toast.error(e?.message || 'Не удалось сохранить работу')
+      toast.error(e?.message || 'Не удалось сохранить ответ')
     }
   }
 

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import toast from '@/lib/safeToast'
 
 export default function SubmissionsList({ assignment }) {
   const [subs, setSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -31,12 +31,10 @@ export default function SubmissionsList({ assignment }) {
     try {
       const { error } = await supabase.from('submissions').update({ grade: (grade || null), feedback: (feedback || null) }).eq('id', id)
       if (error) throw error
-      setToast({ type: 'success', msg: 'Оценка сохранена' })
+      toast.success('Оценка сохранена')
       await load()
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Не удалось сохранить оценку' })
-    } finally {
-      setTimeout(() => setToast(null), 2500)
+      toast.error(e?.message || 'Не удалось сохранить оценку')
     }
   }
 
@@ -76,9 +74,6 @@ export default function SubmissionsList({ assignment }) {
             <li className="py-8 text-center text-gray-500">Нет решений</li>
           )}
         </ul>
-      )}
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
       )}
     </section>
   )

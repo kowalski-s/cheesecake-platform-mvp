@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Loading from '../components/ui/Loading'
+import toast from '@/lib/safeToast'
 
 export default function AdminTeachersPage() {
   const { role } = useAuth()
@@ -16,7 +17,6 @@ export default function AdminTeachersPage() {
   const [editing, setEditing] = useState(null) // teacher object
   const [form, setForm] = useState({ display_name: '', bio: '', user_id: '' })
   const [users, setUsers] = useState([]) // candidates for binding
-  const [toast, setToast] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -70,7 +70,7 @@ export default function AdminTeachersPage() {
       setUsers(data || [])
     } catch (e) {
       console.error('admin_list_role_users failed', e)
-      setToast({ type: 'error', msg: e?.message || 'Ошибка загрузки пользователей' })
+      toast.error(e?.message || 'Ошибка загрузки пользователей')
     }
   }
 
@@ -89,7 +89,7 @@ export default function AdminTeachersPage() {
   const save = async () => {
     try {
       if (!isAdmin) return
-      if (!form.display_name.trim()) { setToast({ type: 'error', msg: 'Введите имя' }); return }
+      if (!form.display_name.trim()) { toast.error('Введите имя'); return }
       if (editing?.id) {
         const { error } = await supabase
           .from('teachers')
@@ -116,13 +116,13 @@ export default function AdminTeachersPage() {
           if (error) throw error
         }
       }
-      setToast({ type: 'success', msg: 'Сохранено' })
+      toast.success('Сохранено')
       setEditing(null)
       await load()
     } catch (e) {
       const msg = String(e?.message || '').toLowerCase()
       const isUnique = msg.includes('duplicate') || msg.includes('unique')
-      setToast({ type: 'error', msg: isUnique ? 'Этот пользователь уже привязан' : (e?.message || 'Ошибка сохранения') })
+      toast.error(isUnique ? 'Этот пользователь уже привязан' : (e?.message || 'Ошибка сохранения'))
     }
   }
 
@@ -130,10 +130,10 @@ export default function AdminTeachersPage() {
     try {
       const { error } = await supabase.from('teachers').update({ user_id: userId || null }).eq('id', id)
       if (error) throw error
-      setToast({ type: 'success', msg: 'Привязано' })
+      toast.success('Привязано')
       await load()
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Не удалось привязать' })
+      toast.error(e?.message || 'Не удалось привязать')
     }
   }
 
@@ -239,10 +239,6 @@ export default function AdminTeachersPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
       )}
     </div>
   )

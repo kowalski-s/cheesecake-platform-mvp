@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 import CreateAndAssignModal from '@/components/assignments/CreateAndAssignModal'
 import { submitHomework, gradeSubmission } from '@/lib/api'
+import toast from '@/lib/safeToast'
 
 const safeText = (v) => (typeof v === 'string' && v.trim().length ? v : '—')
 const fmtDateTime = (iso) => {
@@ -17,87 +18,8 @@ const statusFromSubmission = (s) => {
   return { label: 'ожидает проверки', color: 'bg-yellow-50 text-yellow-700' }
 }
 
-function SelectAssignmentModal({ visible, onClose, onAssigned, teacherId, studentId }) {
-  const [assignments, setAssignments] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [selectedId, setSelectedId] = useState(null)
-  const [toast, setToast] = useState(null)
-
-  useEffect(() => {
-    const loadAssignments = async () => {
-      if (!visible) return
-      setLoading(true)
-      setError(null)
-      try {
-        let q = supabase.from('assignments').select('id, title, due_date').order('created_at', { ascending: false })
-        if (teacherId) q = q.eq('teacher_id', teacherId)
-        const { data, error: aErr } = await q
-        if (aErr) throw aErr
-        setAssignments(data || [])
-      } catch (e) {
-        setError(e?.message || 'Не удалось загрузить задания')
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadAssignments()
-  }, [visible, teacherId])
-
-  const confirmAssign = async () => {
-    try {
-      if (!selectedId || !studentId) { setToast({ type: 'error', msg: 'Выберите задание' }); return }
-      const rows = [{ assignment_id: selectedId, student_id: studentId }]
-      const { error: upErr } = await supabase.from('assignment_targets').upsert(rows, { onConflict: 'assignment_id,student_id', returning: 'minimal' })
-      if (upErr) throw upErr
-      setToast({ type: 'success', msg: 'Задание назначено' })
-      setTimeout(() => setToast(null), 2000)
-      if (typeof onAssigned === 'function') onAssigned({ assignment_id: selectedId, student_id: studentId })
-      if (typeof onClose === 'function') onClose()
-    } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Не удалось назначить' })
-      setTimeout(() => setToast(null), 2500)
-    }
-  }
-
-  if (!visible) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg relative">
-        <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600" aria-label="Закрыть">✕</button>
-        <div className="p-6 space-y-4">
-          <h3 className="text-lg font-semibold">Выберите задание</h3>
-          {loading ? (
-            <div className="text-sm text-gray-500">Загрузка…</div>
-          ) : error ? (
-            <div className="text-sm text-red-600">{error}</div>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {assignments.map(a => (
-                <li key={a.id} className="py-2 flex items-center justify-between">
-                  <label className="flex items-center gap-3">
-                    <input type="radio" name="assignment" value={a.id} onChange={() => setSelectedId(a.id)} />
-                    <span className="font-medium">{a.title}</span>
-                  </label>
-                  <span className="text-xs text-gray-500">{a.due_date ? new Date(a.due_date).toLocaleDateString() : '—'}</span>
-                </li>
-              ))}
-              {assignments.length === 0 && <li className="py-4 text-center text-sm text-gray-500">Нет заданий</li>}
-            </ul>
-          )}
-          <div className="flex justify-end gap-2">
-            <button className="btn-outline" onClick={onClose}>Отмена</button>
-            <button className="btn-primary" onClick={confirmAssign}>Назначить</button>
-          </div>
-        </div>
-        {toast && (
-          <div className={`absolute -top-8 right-4 rounded-xl px-3 py-1 text-sm shadow ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.msg}</div>
-        )}
-      </div>
-    </div>
-  )
-}
+// [MVP simplification] Отключено: модалка выбора ДЗ из «хранилища»
+// function SelectAssignmentModal({ visible, onClose, onAssigned, teacherId, studentId }) { /* disabled for MVP */ }
 
 export default function LessonPage() {
   const { id } = useParams()
@@ -106,9 +28,8 @@ export default function LessonPage() {
   const [lesson, setLesson] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
   const [userId, setUserId] = useState(null)
-  const [assignOpen, setAssignOpen] = useState(false)
+  // const [assignOpen, setAssignOpen] = useState(false) // disabled for MVP
   const [createOpen, setCreateOpen] = useState(false)
   const [assignments, setAssignments] = useState([])
   const [subsByAssign, setSubsByAssign] = useState({})
@@ -273,11 +194,9 @@ export default function LessonPage() {
       setSubsByAssign(prev => ({ ...prev, [a.id]: subsData || null }))
       setCommentByAssign(prev => ({ ...prev, [a.id]: '' }))
       setFileByAssign(prev => ({ ...prev, [a.id]: null }))
-      setToast({ type: 'success', msg: 'Работа отправлена' })
-      setTimeout(() => setToast(null), 2500)
+      toast.success('Работа отправлена')
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Не удалось отправить работу' })
-      setTimeout(() => setToast(null), 2500)
+      toast.error(e?.message || 'Не удалось отправить работу')
     }
   }
 
@@ -303,11 +222,9 @@ export default function LessonPage() {
         .eq('student_id', lesson.student_id)
         .maybeSingle()
       setSubsByAssign(prev => ({ ...prev, [a.id]: subsData || null }))
-      setToast({ type: 'success', msg: 'Оценка сохранена' })
-      setTimeout(() => setToast(null), 2500)
+      toast.success('Оценка сохранена')
     } catch (e) {
-      setToast({ type: 'error', msg: e?.message || 'Не удалось сохранить оценку' })
-      setTimeout(() => setToast(null), 2500)
+      toast.error(e?.message || 'Не удалось сохранить оценку')
     }
   }
 
@@ -329,7 +246,7 @@ export default function LessonPage() {
         {canAssign && (
           <div className="mt-4 flex items-center gap-2">
             <button className="btn-outline" onClick={() => setCreateOpen(true)}>Создать ДЗ</button>
-            <button className="btn-primary" onClick={() => setAssignOpen(true)}>Назначить ДЗ</button>
+            {/* Кнопка «Назначить ДЗ» отключена для MVP */}
           </div>
         )}
         {canGrade && (
@@ -340,26 +257,26 @@ export default function LessonPage() {
         )}
       </section>
 
+      {/* Отключено: выбор из хранилища
       <SelectAssignmentModal
         visible={assignOpen}
         onClose={() => setAssignOpen(false)}
-        onAssigned={() => { setToast({ type: 'success', msg: 'ДЗ назначено' }); refreshAssignments(); }}
+        onAssigned={() => { toast.success('ДЗ назначено'); refreshAssignments(); }}
         teacherId={lesson.teacher_id}
         studentId={lesson.student_id}
       />
+      */}
 
       <CreateAndAssignModal
         visible={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={() => { setToast({ type: 'success', msg: 'ДЗ создано' }); refreshAssignments(); }}
+        onCreated={() => { toast.success('ДЗ создано'); refreshAssignments(); }}
         teacherId={lesson.teacher_id}
         studentId={lesson.student_id}
         lessonId={lesson.id}
       />
 
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast?.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast?.msg}</div>
-      )}
+      
 
       <section className="card">
         <h2 className="mb-3 text-lg font-semibold">Задания урока</h2>

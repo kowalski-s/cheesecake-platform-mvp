@@ -36,13 +36,16 @@ import AdminTeacherProfile from "./pages/admin/TeacherProfile";
 import TeacherProfile from "./pages/TeacherProfile";
 import AdminProfile from "./pages/AdminProfile";
 import TeachersPage from "./pages/Teachers";
+import NotificationsPage from "./pages/Notifications";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleGuard from "./components/RoleGuard";
 import Loading from "./components/ui/Loading";
 import AppLayout from "./layouts/AppLayout";
 import UserMenu from "./components/UserMenu";
+import NotificationsBell from "./components/NotificationsBell";
 import { supabase } from "./lib/supabaseClient";
 import { getMyTeacherId } from "./lib/api";
+import AppToaster from "./components/toast/AppToaster";
 
 function App() {
   const { profile, initializing } = useAuth();
@@ -238,12 +241,22 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
+                <Route
+                  path="/notifications"
+                  element={
+                    <ProtectedRoute>
+                      <NotificationsPage />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             )}
           </AppLayout>
         )}
       </main>
+
+      <AppToaster />
 
       {!isAuthPage && <Footer />}
     </div>
@@ -254,7 +267,7 @@ function Topbar({ onToggleSidebar }) {
   const { user } = useAuth();
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200/60 dark:bg-slate-900/70 dark:border-slate-800/60">
-      <div className="container mx-auto flex items-center justify-between py-3 px-4">
+      <div className="flex items-center justify-between py-3 px-4">
         {/* Left: logo + brand */}
         <div className="flex items-center gap-2">
           <div className="h-10 w-10 rounded-xl bg-brand flex items-center justify-center text-white font-bold">🟠</div>
@@ -275,7 +288,10 @@ function Topbar({ onToggleSidebar }) {
             </svg>
           </button>
           {user ? (
-            <UserMenu />
+            <>
+              <NotificationsBell />
+              <UserMenu />
+            </>
           ) : (
             <NavLink to="/login" className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100">Войти</NavLink>
           )}

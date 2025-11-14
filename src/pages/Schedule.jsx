@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import Loading from '../components/ui/Loading'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import toast from '@/lib/safeToast'
 
 export default function SchedulePage() {
   const { role, user } = useAuth()
@@ -19,7 +20,7 @@ export default function SchedulePage() {
   const [teachers, setTeachers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [toast, setToast] = useState(null)
+  
   const [teacherMap, setTeacherMap] = useState({})
   const withTimeout = (p, ms = 8000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
 
@@ -78,7 +79,7 @@ export default function SchedulePage() {
       console.error('Ошибка загрузки занятий:', err)
       const msg = err?.message || 'Не удалось загрузить расписание'
       setError(msg)
-      setToast({ type: 'error', msg })
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -100,7 +101,7 @@ export default function SchedulePage() {
       setLessons(lessons.map(l => l.id === lessonId ? { ...l, status } : l))
     } catch (e) {
       console.error('update status failed', e)
-      setToast({ type: 'error', msg: `Не удалось обновить статус: ${e?.message || 'неизвестная ошибка'}` })
+      toast.error(`Не удалось обновить статус: ${e?.message || 'неизвестная ошибка'}`)
     }
   }
 
@@ -242,9 +243,7 @@ export default function SchedulePage() {
             </ul>
           </section>
 
-          {toast && (
-            <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow ${toast?.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast?.msg}</div>
-          )}
+          
         </>
       )}
     </div>
