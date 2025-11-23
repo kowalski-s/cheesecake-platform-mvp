@@ -28,8 +28,23 @@ export default function DayGrid({ date, teachers = [], lessons = [], onEmptySlot
     <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-white">
       <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
         <div className="grid grid-cols-[80px_repeat(var(--cols),1fr)] gap-0" style={{ ['--cols']: teachers.length || 1 }}>
+          {/* Заголовок: пустая ячейка + заголовки преподавателей */}
+          <div className="sticky top-0 z-20 bg-white border-b border-r border-gray-200 p-2"></div>
+          {teachers.length > 0 ? teachers.map(t => (
+            <div
+              key={`header-${t.id}`}
+              className="sticky top-0 z-20 bg-white border-b border-r border-gray-200 p-2 text-center text-sm font-medium text-gray-700 last:border-r-0"
+            >
+              {t.display_name || t.id}
+            </div>
+          )) : (
+            <div className="sticky top-0 z-20 bg-white border-b border-r border-gray-200 p-2 text-center text-sm text-gray-500">
+              Нет преподавателей
+            </div>
+          )}
+
           {/* Left time rail */}
-          <div className="sticky left-0 z-10 bg-gray-50 border-r border-gray-200">
+          <div className="sticky left-0 z-10 bg-gray-50 border-r border-gray-200" style={{ top: 0 }}>
             {slots.map((s, idx) => (
               <div 
                 key={idx} 
@@ -46,11 +61,6 @@ export default function DayGrid({ date, teachers = [], lessons = [], onEmptySlot
             const teacherLessons = (lessons || []).filter(l => l.teacher_id === t.id)
             return (
               <div key={t.id} className="relative border-r border-gray-200 last:border-r-0">
-                {/* Teacher header */}
-                <div className="sticky top-0 z-10 bg-white border-b border-gray-200 p-2 text-center text-sm font-medium text-gray-700">
-                  {t.display_name || t.id}
-                </div>
-                
                 {/* Empty slots overlay clickable */}
                 {slots.map((s, idx) => (
                   <div
@@ -95,9 +105,6 @@ export default function DayGrid({ date, teachers = [], lessons = [], onEmptySlot
             )
           }) : (
             <div className="relative border-r border-gray-200">
-              <div className="sticky top-0 z-10 bg-white border-b border-gray-200 p-2 text-center text-sm text-gray-500">
-                Нет преподавателей
-              </div>
               {slots.map((s, idx) => (
                 <div 
                   key={idx} 

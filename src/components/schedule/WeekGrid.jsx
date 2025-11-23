@@ -53,11 +53,11 @@ export default function WeekGrid({ weekStart, teachers = [], lessons = [], onEmp
       <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
         <div className="grid grid-cols-[80px_repeat(7,1fr)] gap-0">
           {/* Заголовок: пустая ячейка + дни недели */}
-          <div className="sticky top-0 z-10 bg-white border-b border-r border-gray-200 p-2"></div>
+          <div className="sticky top-0 z-20 bg-white border-b border-r border-gray-200 p-2"></div>
           {weekDays.map((day, idx) => (
             <div
               key={`header-${idx}`}
-              className="sticky top-0 z-10 bg-white border-b border-r border-gray-200 p-2 text-center"
+              className="sticky top-0 z-20 bg-white border-b border-r border-gray-200 p-2 text-center"
             >
               <div className="text-xs font-medium text-gray-700">
                 {getWeekdayLabel(day)}
@@ -69,7 +69,7 @@ export default function WeekGrid({ weekStart, teachers = [], lessons = [], onEmp
           ))}
 
           {/* Временная шкала (столбик слева) */}
-          <div className="sticky left-0 z-10 bg-gray-50 border-r border-gray-200">
+          <div className="sticky left-0 z-10 bg-gray-50 border-r border-gray-200" style={{ top: 0 }}>
             {timeSlots.map((slot, slotIdx) => (
               <div 
                 key={`time-${slotIdx}`}
