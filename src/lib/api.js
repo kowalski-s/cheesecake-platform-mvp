@@ -94,8 +94,9 @@ export async function fetchLessons(sb, { start, end, teacherIds = [] }) {
   return data || []
 }
 
-export async function createLesson(sb, { title = null, start_at, end_at = null, duration_min = null, status = 'planned', comment = null, teacher_id, student_id }) {
+export async function createLesson(sb, { title = null, class_name = null, start_at, end_at = null, duration_min = null, status = 'planned', comment = null, teacher_id, student_id }) {
   const payload = { title, start_at, status, comment, teacher_id, student_id }
+  if (class_name) payload.class_name = class_name
   if (end_at) payload.end_at = end_at
   if (duration_min != null) payload.duration_min = duration_min
   const { data, error } = await sb
