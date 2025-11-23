@@ -7,14 +7,14 @@ export default function LessonCard({ lesson, onClick }) {
   const formatTime = (d) => format(d, 'HH:mm')
   const timeStr = `${formatTime(start)}–${formatTime(end)}`
   
-  // Цвета по статусу в стиле Cheesecake (светлая тема)
-  const statusStyles = {
-    planned: 'bg-orange-50 border-l-4 border-orange-400 hover:bg-orange-100',
-    done: 'bg-green-50 border-l-4 border-green-400 hover:bg-green-100',
-    canceled: 'bg-gray-100 border-l-4 border-gray-400 line-through opacity-70',
+  // Цвета полоски по статусу
+  const statusBorderColors = {
+    planned: 'border-l-orange-400',
+    done: 'border-l-green-400',
+    canceled: 'border-l-gray-400',
   }
   
-  const style = statusStyles[lesson.status] || statusStyles.planned
+  const borderColor = statusBorderColors[lesson.status] || statusBorderColors.planned
   
   // Обрезаем длинные названия
   const title = lesson.title || '(без названия)'
@@ -22,15 +22,15 @@ export default function LessonCard({ lesson, onClick }) {
   
   return (
     <div
-      className={`rounded-lg p-2 text-xs cursor-pointer transition-colors shadow-sm ${style}`}
+      className={`bg-white border-l-2 ${borderColor} rounded-xl p-2 text-xs cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 ${lesson.status === 'canceled' ? 'opacity-70 line-through' : ''}`}
       onClick={(e) => {
         e.stopPropagation()
         if (onClick) onClick(lesson)
       }}
       title={title}
     >
-      <div className="font-medium text-gray-900 mb-0.5">{displayTitle}</div>
-      <div className="text-gray-600 text-[10px] mb-0.5">{timeStr}</div>
+      <div className="font-bold text-gray-900 mb-0.5">{displayTitle}</div>
+      <div className="text-gray-500 text-[10px] mb-0.5">{timeStr}</div>
       <div className="text-gray-500 text-[10px]">
         {lesson.class_name && <span className="mr-1">{lesson.class_name}</span>}
         {lesson.student?.display_name && <span>• {lesson.student.display_name}</span>}

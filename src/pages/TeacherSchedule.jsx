@@ -203,11 +203,71 @@ export default function TeacherSchedulePage() {
   }
 
   if (!isTeacher) return <div className="card p-6">Доступ запрещён</div>
-  if (loading) return <Loading />
-
-  const currentDateLabel = viewMode === 'week' 
-    ? `${format(date, 'd MMM', { locale: ru })} - ${format(new Date(date.getTime() + 6 * 24 * 60 * 60 * 1000), 'd MMM yyyy', { locale: ru })}`
+  
+  // Форматирование даты для заголовка
+  const dateHeaderText = viewMode === 'week' 
+    ? `${format(date, 'd MMMM', { locale: ru })} — ${format(new Date(date.getTime() + 6 * 24 * 60 * 60 * 1000), 'd MMMM yyyy', { locale: ru })}`
     : format(date, 'd MMMM yyyy', { locale: ru })
+  
+  // Подсчёт активных и отменённых занятий
+  const activeLessons = lessons.filter(l => l.status === 'planned' || l.status === 'done')
+  const canceledLessons = lessons.filter(l => l.status === 'canceled')
+  
+  const activeCount = activeLessons.length
+  const canceledCount = canceledLessons.length
+  
+  // Форматирование количества активных занятий
+  const formatActiveCount = (count) => {
+    if (count === 0) return 'нет занятий'
+    if (count === 1) return '1 занятие'
+    if (count < 5) return `${count} занятия`
+    return `${count} занятий`
+  }
+  
+  // Форматирование количества отменённых занятий
+  const formatCanceledCount = (count) => {
+    if (count === 1) return '1 отменено'
+    return `${count} отменено`
+  }
+  
+  // Формирование итогового текста статистики
+  // Если фильтр по статусу = "Отменено", показываем только отменённые
+  // Если фильтр по статусу = "Запланировано" или "Проведено", показываем только активные
+  // Если фильтр пустой, показываем и активные, и отменённые (если есть)
+  const isFilteredByCanceled = filters.status === 'canceled'
+  const isFilteredByActive = filters.status === 'planned' || filters.status === 'done'
+  
+  let lessonsCountText
+  if (isFilteredByCanceled) {
+    // Показываем только отменённые
+    lessonsCountText = canceledCount > 0 ? formatCanceledCount(canceledCount) : 'нет занятий'
+  } else if (isFilteredByActive) {
+    // Показываем только активные
+    lessonsCountText = formatActiveCount(activeCount)
+  } else {
+    // Показываем и активные, и отменённые (если есть)
+    lessonsCountText = canceledCount > 0
+      ? `${formatActiveCount(activeCount)} · ${formatCanceledCount(canceledCount)}`
+      : formatActiveCount(activeCount)
+  }
+
+  // Скелетон при загрузке
+  const CalendarSkeleton = () => (
+    <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="p-4 space-y-3">
+        <div className="h-4 bg-gray-200 rounded w-1/3 animate-pulse"></div>
+        <div className="h-4 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+        <div className="h-4 bg-gray-200 rounded w-2/3 animate-pulse"></div>
+      </div>
+      <div className="border-t border-gray-200 p-4">
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="h-12 bg-gray-100 rounded animate-pulse"></div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="space-y-4">
@@ -290,7 +350,7 @@ export default function TeacherSchedulePage() {
                 →
               </button>
             </div>
-            <div className="mt-2 text-sm text-gray-600 text-center">{currentDateLabel}</div>
+            <div className="mt-2 text-sm text-gray-600 text-center">{dateHeaderText}</div>
           </div>
 
           {/* Filters */}
@@ -374,23 +434,52 @@ export default function TeacherSchedulePage() {
 
         {/* Right: calendar grid */}
         <div className="lg:col-span-3">
-          <div className="card p-4">
-            {viewMode === 'day' ? (
-              <DayGrid
-                date={date}
-                teachers={teachers.filter(t => selectedTeacherIds.includes(t.id))}
-                lessons={lessons}
-                onEmptySlotClick={handleEmptySlotClick}
-                onLessonClick={handleLessonClick}
-              />
+          <div className="card p-4 space-y-3">
+            {/* Заголовок с датой и количеством занятий + легенда */}
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                {dateHeaderText} · {lessonsCountText}
+              </div>
+              {/* Легенда статусов */}
+              <div className="flex items-center gap-3 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-sm border border-gray-200">
+                <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <div className="w-2 h-2 rounded-full bg-orange-400"></div>
+                  <span>Запланировано</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                  <span>Проведено</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <div className="w-2 h-2 rounded-full bg-gray-400"></div>
+                  <span>Отменено</span>
+                </div>
+              </div>
+            </div>
+            
+            {loading ? (
+              <CalendarSkeleton />
             ) : (
-              <WeekGrid
-                weekStart={date}
-                teachers={teachers.filter(t => selectedTeacherIds.includes(t.id))}
-                lessons={lessons}
-                onEmptySlotClick={handleEmptySlotClick}
-                onLessonClick={handleLessonClick}
-              />
+              <>
+                {viewMode === 'day' ? (
+                  <DayGrid
+                    date={date}
+                    teachers={teachers.filter(t => selectedTeacherIds.includes(t.id))}
+                    lessons={lessons}
+                    onEmptySlotClick={handleEmptySlotClick}
+                    onLessonClick={handleLessonClick}
+                  />
+                ) : (
+                  <WeekGrid
+                    weekStart={date}
+                    teachers={teachers.filter(t => selectedTeacherIds.includes(t.id))}
+                    lessons={lessons}
+                    onEmptySlotClick={handleEmptySlotClick}
+                    onLessonClick={handleLessonClick}
+                    currentDate={new Date()}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>

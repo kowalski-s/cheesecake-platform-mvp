@@ -95,12 +95,15 @@ export default function EventDrawer({ open, onClose, date, teachers = [], studen
     <>
       {/* Overlay */}
       <div 
-        className="fixed inset-0 bg-black/40 z-40" 
+        className={`fixed inset-0 bg-black/40 z-40 transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
       ></div>
       {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div 
+          className={`bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto transition-all duration-200 ${open ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">{editing ? 'Редактирование урока' : 'Создание урока'}</h3>
