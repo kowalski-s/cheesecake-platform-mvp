@@ -1,0 +1,9 @@
+-- «Анти-миграция»: быстро откатить админские политики и функцию
+
+-- students/teachers/materials
+drop policy if exists "admin full access students"   on public.students;
+drop policy if exists "admin full access teachers"   on public.teachers;
+drop policy if exists "admin full access materials"  on public.materials;
+
+-- функция
+drop function if exists public.is_admin(uid uuid);
