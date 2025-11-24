@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { getMyTeacherId, getMyStudentId } from "../lib/api";
+import AccordionNavItem from "../components/sidebar/AccordionNavItem";
 
 export default function AppLayout({ children, mobileSidebarOpen = false, onCloseSidebar = () => {} }) {
   const { role: ctxRole, profile } = useAuth();
@@ -220,20 +221,56 @@ export default function AppLayout({ children, mobileSidebarOpen = false, onClose
           </NavLink>
         </nav>
 
-        {/* Admin link at bottom (only for admin) */}
+        {/* Admin links at bottom (only for admin) */}
         {role === "admin" && (
           <div className="p-3">
             <div className="my-2 h-px bg-slate-200/60 dark:bg-slate-800/60" />
-            <NavLink
-              to="/admin"
-              aria-label="Админ-панель"
-              className={({ isActive }) =>
-                `rounded-lg px-3 py-2 transition ${isActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`
+            <AccordionNavItem
+              label="Аналитика"
+              to="/admin/analytics"
+              icon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
               }
-              aria-current={({ isActive }) => (isActive ? "page" : undefined)}
             >
-              Админ-панель
-            </NavLink>
+              {[
+                { label: "Сводка", to: "/admin/analytics/overview" },
+                { label: "Ученики", to: "/admin/analytics/students" },
+                { label: "Преподаватели", to: "/admin/analytics/teachers" },
+                { label: "Абонементы и выручка", to: "/admin/analytics/subscriptions" },
+                { label: "Успеваемость", to: "/admin/analytics/performance" },
+              ]}
+            </AccordionNavItem>
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              {(() => {
+                const pathname = location.pathname;
+                // Админ-панель активна только если мы на /admin или его подпутях, но НЕ на /admin/analytics/*
+                // Важно: проверяем сначала /admin/analytics, чтобы исключить эти пути
+                const isAdminPanelActive =
+                  pathname.startsWith("/admin") &&
+                  !pathname.startsWith("/admin/analytics");
+                
+                return (
+                  <NavLink
+                    to="/admin"
+                    aria-label="Админ-панель"
+                    className={() => {
+                      // Полностью игнорируем isActive от NavLink, используем только нашу логику
+                      return `rounded-lg px-3 py-2 transition ${isAdminPanelActive ? "bg-gray-100 text-brand font-medium" : "text-gray-600 hover:text-gray-800"}`;
+                    }}
+                    aria-current={isAdminPanelActive ? "page" : undefined}
+                  >
+                    Админ-панель
+                  </NavLink>
+                );
+              })()}
+            </div>
           </div>
         )}
       </div>

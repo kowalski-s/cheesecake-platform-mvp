@@ -125,6 +125,19 @@ export default function AdminLayout() {
           >
             Занятия
           </NavLink>
+          <NavLink
+            to="analytics"
+            className={({ isActive }) =>
+              `py-3 text-sm font-medium border-b-2 transition ${
+                isActive
+                  ? "border-orange-400 text-orange-500"
+                  : "border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-200"
+              }`
+            }
+            end
+          >
+            Аналитика
+          </NavLink>
         </nav>
       </div>
 

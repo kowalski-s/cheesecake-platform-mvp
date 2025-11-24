@@ -31,6 +31,12 @@ import AdminStudentsPage from "./pages/AdminStudents";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminMaterialsPage from "./pages/AdminMaterials";
 import AdminLessonsPage from "./pages/AdminLessons";
+import AdminAnalyticsPage from "./pages/admin/AdminAnalyticsPage";
+import AdminAnalyticsOverviewPage from "./pages/admin/analytics/AdminAnalyticsOverviewPage";
+import AdminAnalyticsStudentsPage from "./pages/admin/analytics/AdminAnalyticsStudentsPage";
+import AdminAnalyticsTeachersPage from "./pages/admin/analytics/AdminAnalyticsTeachersPage";
+import AdminAnalyticsSubscriptionsPage from "./pages/admin/analytics/AdminAnalyticsSubscriptionsPage";
+import AdminAnalyticsPerformancePage from "./pages/admin/analytics/AdminAnalyticsPerformancePage";
 import AdminStudentProfile from "./pages/admin/StudentProfile";
 import AdminTeacherProfile from "./pages/admin/TeacherProfile";
 import TeacherProfile from "./pages/TeacherProfile";
@@ -221,7 +227,50 @@ function App() {
                   <Route path="users" element={<AdminUsersPage />} />
                   <Route path="materials" element={<AdminMaterialsPage />} />
                   <Route path="lessons" element={<AdminLessonsPage />} />
+                  <Route path="analytics" element={<AdminAnalyticsPage />} />
                 </Route>
+
+                {/* Админская аналитика - отдельные страницы */}
+                <Route
+                  path="/admin/analytics/overview"
+                  element={
+                    <ProtectedRoute role="admin">
+                      <AdminAnalyticsOverviewPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/analytics/students"
+                  element={
+                    <ProtectedRoute role="admin">
+                      <AdminAnalyticsStudentsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/analytics/teachers"
+                  element={
+                    <ProtectedRoute role="admin">
+                      <AdminAnalyticsTeachersPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/analytics/subscriptions"
+                  element={
+                    <ProtectedRoute role="admin">
+                      <AdminAnalyticsSubscriptionsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/analytics/performance"
+                  element={
+                    <ProtectedRoute role="admin">
+                      <AdminAnalyticsPerformancePage />
+                    </ProtectedRoute>
+                  }
+                />
 
                 <Route
                   path="/admin-profile"
