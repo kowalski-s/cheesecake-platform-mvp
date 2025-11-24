@@ -38,3 +38,9 @@
     transform: translateY(0);
   }
 }
+
+/* Стили для графиков статистики */
+.recharts-bar-rectangle:hover {
+  opacity: 0.85 !important;
+  transition: opacity 0.2s ease;
+}

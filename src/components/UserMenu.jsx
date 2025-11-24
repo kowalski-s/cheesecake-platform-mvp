@@ -16,23 +16,45 @@ export default function UserMenu() {
   const { user, role, profile, session } = useAuth()
   const location = useLocation()
   const [open, setOpen] = useState(false)
-  const [teacherProfile, setTeacherProfile] = useState(null)
+  const [userProfile, setUserProfile] = useState(null) // Профиль в зависимости от роли
   const ref = useRef(null)
 
-  // Загружаем данные преподавателя для получения avatar_url
+  // Загружаем данные профиля для получения avatar_url в зависимости от роли
   useEffect(() => {
-    if (!user?.id || role?.trim()?.toLowerCase() !== 'teacher') return
+    if (!user?.id) return
     let alive = true
     const load = async () => {
       try {
-        const { data } = await supabase
-          .from('teachers')
-          .select('display_name, avatar_url')
-          .eq('user_id', user.id)
-          .maybeSingle()
-        if (alive && data) setTeacherProfile(data)
+        const normalizedRole = role?.trim()?.toLowerCase()
+        let data = null
+
+        if (normalizedRole === 'teacher') {
+          const { data: teacherData } = await supabase
+            .from('teachers')
+            .select('display_name, avatar_url')
+            .eq('user_id', user.id)
+            .maybeSingle()
+          data = teacherData
+        } else if (normalizedRole === 'student') {
+          const { data: studentData } = await supabase
+            .from('students')
+            .select('display_name, avatar_url')
+            .eq('user_id', user.id)
+            .maybeSingle()
+          data = studentData
+        } else if (normalizedRole === 'admin') {
+          // Для админа берем из users
+          const { data: userData } = await supabase
+            .from('users')
+            .select('display_name, avatar_url')
+            .eq('id', user.id)
+            .maybeSingle()
+          data = userData
+        }
+
+        if (alive && data) setUserProfile(data)
       } catch (e) {
-        console.error('Failed to load teacher profile', e)
+        console.error('Failed to load user profile', e)
       }
     }
     load()
@@ -57,13 +79,14 @@ export default function UserMenu() {
   }, [location.pathname])
 
   const normalizedRole = useMemo(() => role?.trim()?.toLowerCase() ?? null, [role])
-  const displayName = teacherProfile?.display_name || profile?.display_name || ""
+  const displayName = userProfile?.display_name || profile?.display_name || ""
   const email = session?.user?.email || ""
-  const avatarUrl = teacherProfile?.avatar_url || profile?.avatar_url || null
+  const avatarUrl = userProfile?.avatar_url || profile?.avatar_url || null
   const roleLabel = getRoleLabel(role)
 
   const profilePath = normalizedRole === "student" ? "/students/me" : normalizedRole === "teacher" ? "/teacher/profile" : normalizedRole === "admin" ? "/admin-profile" : "/"
   const analyticsPath = normalizedRole === "teacher" || normalizedRole === "admin" ? "/teacher/analytics" : null
+  const statisticsPath = normalizedRole === "student" ? "/student/analytics" : null
 
   if (!user) {
     return null
@@ -135,6 +158,19 @@ export default function UserMenu() {
                   onClick={() => setOpen(false)}
                 >
                   Аналитика
+                </NavLink>
+              )}
+              {statisticsPath && (
+                <NavLink
+                  className={({ isActive }) => `block w-full text-left rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                    isActive 
+                      ? "bg-orange-50 text-orange-600" 
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                  to={statisticsPath}
+                  onClick={() => setOpen(false)}
+                >
+                  Статистика
                 </NavLink>
               )}
               <button 

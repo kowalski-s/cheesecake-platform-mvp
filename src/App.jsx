@@ -35,6 +35,7 @@ import AdminStudentProfile from "./pages/admin/StudentProfile";
 import AdminTeacherProfile from "./pages/admin/TeacherProfile";
 import TeacherProfile from "./pages/TeacherProfile";
 import TeacherAnalytics from "./pages/TeacherAnalytics";
+import StudentAnalytics from "./pages/StudentAnalytics";
 import AdminProfile from "./pages/AdminProfile";
 import TeachersPage from "./pages/Teachers";
 import NotificationsPage from "./pages/Notifications";
@@ -248,6 +249,16 @@ function App() {
                     <ProtectedRoute>
                       <RoleGuard allow={["student"]}>
                         <StudentsPage />
+                      </RoleGuard>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/student/analytics"
+                  element={
+                    <ProtectedRoute>
+                      <RoleGuard allow={["student"]}>
+                        <StudentAnalytics />
                       </RoleGuard>
                     </ProtectedRoute>
                   }

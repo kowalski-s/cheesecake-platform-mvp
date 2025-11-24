@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 
-// Получить метрики и таймлайн оценок для ученика
+// Получить метрики и таймлайн оценок для ученика (без фильтрации по периоду, для обратной совместимости)
 // Возвращает объект:
 // {
 //   lessonsTotal, lessonsLeft, completedLessons, progressPercent,
@@ -113,5 +113,219 @@ export async function getStudentAnalytics(studentId) {
     averageGrade,
     lastActivityAt,
     gradesTimeline,
+  }
+}
+
+/**
+ * Получить расширенную аналитику студента с фильтрацией по периоду
+ * @param {string} studentId - ID студента
+ * @param {object} options - { from, to } - ISO строки дат или null
+ * @returns {object} - метрики за период
+ */
+export async function getStudentAnalyticsByPeriod(studentId, { from = null, to = null } = {}) {
+  if (!studentId) throw new Error('studentId is required')
+  
+  const empty = {
+    lessonsTotal: 0,
+    completedLessons: 0,
+    plannedLessons: 0,
+    canceledLessons: 0,
+    totalAssignments: 0,
+    completedAssignments: 0,
+    onTimeAssignments: 0, // Своевременно сданные ДЗ
+    averageGrade: null,
+    lastActivityAt: null,
+    submissionsCount: 0,
+    gradesTimeline: [],
+    lessonsList: [],
+    assignmentsList: [],
+  }
+
+  try {
+    if (!supabase) return empty
+
+    // Уроки студента с фильтрацией по периоду
+    let lessonsQuery = supabase
+      .from('lessons')
+      .select('id, title, start_at, end_at, status, class_name, teacher:teachers(id, display_name)')
+      .eq('student_id', studentId)
+    
+    if (from) {
+      lessonsQuery = lessonsQuery.gte('start_at', from)
+    }
+    if (to) {
+      lessonsQuery = lessonsQuery.lte('start_at', to)
+    }
+    
+    const { data: lessons, error: lessonsErr } = await lessonsQuery
+    if (lessonsErr) throw lessonsErr
+
+    const lessonsArray = Array.isArray(lessons) ? lessons : []
+    const completedLessons = lessonsArray.filter(l => l.status === 'done').length
+    const plannedLessons = lessonsArray.filter(l => l.status === 'planned').length
+    const canceledLessons = lessonsArray.filter(l => l.status === 'canceled').length
+    const totalLessons = lessonsArray.length
+
+    // Получаем ID заданий, назначенных студенту
+    const { data: assignmentTargets } = await supabase
+      .from('assignment_targets')
+      .select('assignment_id')
+      .eq('student_id', studentId)
+
+    const assignmentIds = Array.isArray(assignmentTargets) 
+      ? [...new Set(assignmentTargets.map(at => at.assignment_id))] 
+      : []
+
+    // Задания с фильтрацией по дате создания (если период задан)
+    let assignmentsQuery = supabase
+      .from('assignments')
+      .select('id, title, created_at, due_date, teacher:teachers(display_name)')
+      .in('id', assignmentIds.length > 0 ? assignmentIds : ['00000000-0000-0000-0000-000000000000'])
+
+    if (from) {
+      assignmentsQuery = assignmentsQuery.gte('created_at', from)
+    }
+    if (to) {
+      assignmentsQuery = assignmentsQuery.lte('created_at', to)
+    }
+
+    const { data: assignments, error: assignsErr } = await assignmentsQuery
+    if (assignsErr) throw assignsErr
+
+    const assignmentsArray = Array.isArray(assignments) ? assignments : []
+    const totalAssignments = assignmentsArray.length
+
+    // Сабмишены студента по этим заданиям
+    const assignmentIdsForSubs = assignmentsArray.map(a => a.id)
+    let submissionsQuery = supabase
+      .from('submissions')
+      .select('id, assignment_id, grade, created_at, updated_at')
+      .eq('student_id', studentId)
+      .in('assignment_id', assignmentIdsForSubs.length > 0 ? assignmentIdsForSubs : ['00000000-0000-0000-0000-000000000000'])
+
+    if (from) {
+      submissionsQuery = submissionsQuery.gte('created_at', from)
+    }
+    if (to) {
+      submissionsQuery = submissionsQuery.lte('created_at', to)
+    }
+
+    const { data: submissions, error: subsErr } = await submissionsQuery
+    if (subsErr) throw subsErr
+
+    const submissionsArray = Array.isArray(submissions) ? submissions : []
+    const completedAssignments = new Set(submissionsArray.map(s => s.assignment_id)).size
+    const submissionsCount = submissionsArray.length
+
+    // Своевременно сданные ДЗ (до дедлайна)
+    const now = new Date()
+    const onTimeAssignments = assignmentsArray.filter(assign => {
+      if (!assign.due_date) return false
+      const submission = submissionsArray.find(s => s.assignment_id === assign.id)
+      if (!submission) return false
+      const submittedAt = new Date(submission.created_at || submission.updated_at)
+      const dueDate = new Date(assign.due_date)
+      return submittedAt <= dueDate
+    }).length
+
+    // Средняя оценка за период
+    const grades = submissionsArray
+      .map(s => {
+        const g = typeof s.grade === 'string' ? parseFloat(s.grade.replace(',', '.')) : (typeof s.grade === 'number' ? s.grade : NaN)
+        return Number.isFinite(g) ? g : null
+      })
+      .filter(g => g !== null)
+
+    const averageGrade = grades.length > 0
+      ? Math.round((grades.reduce((acc, v) => acc + v, 0) / grades.length) * 10) / 10
+      : null
+
+    // Таймлайн оценок
+    const gradesTimeline = submissionsArray
+      .filter(s => s.grade != null)
+      .map(s => {
+        const assign = assignmentsArray.find(a => a.id === s.assignment_id)
+        const dateIso = (s.updated_at || s.created_at) ? new Date(s.updated_at || s.created_at).toISOString() : null
+        const gradeNum = typeof s.grade === 'string' ? parseFloat(s.grade.replace(',', '.')) : (typeof s.grade === 'number' ? s.grade : null)
+        return {
+          date: dateIso,
+          grade: gradeNum,
+          title: assign?.title || 'Без названия',
+          lessonDate: null // Можно добавить связь с уроком если нужно
+        }
+      })
+      .filter(item => item.date && Number.isFinite(item.grade))
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+
+    // Последняя активность
+    const lastLessonAt = lessonsArray.length > 0
+      ? lessonsArray
+          .filter(l => l.start_at && new Date(l.start_at) <= now)
+          .sort((a, b) => new Date(b.start_at) - new Date(a.start_at))[0]?.start_at
+      : null
+
+    const lastSubAt = submissionsArray.length > 0
+      ? submissionsArray
+          .map(s => s.updated_at || s.created_at)
+          .filter(Boolean)
+          .sort((a, b) => new Date(b) - new Date(a))[0]
+      : null
+
+    const lastActivityAt = [lastLessonAt, lastSubAt]
+      .filter(Boolean)
+      .sort((a, b) => new Date(b) - new Date(a))[0] || null
+
+    // Формируем списки для таблиц
+    const lessonsList = lessonsArray.map(l => ({
+      id: l.id,
+      date: l.start_at,
+      title: l.title || '—',
+      class_name: l.class_name || '—',
+      teacher: l.teacher?.display_name || '—',
+      status: l.status,
+      grade: null, // Оценка за урок (если есть в БД)
+      assignmentStatus: null, // Статус ДЗ (будет вычисляться на фронте)
+    }))
+
+    const assignmentsList = assignmentsArray.map(a => {
+      const submission = submissionsArray.find(s => s.assignment_id === a.id)
+      const isOnTime = submission && a.due_date 
+        ? new Date(submission.created_at || submission.updated_at) <= new Date(a.due_date)
+        : false
+      const isOverdue = a.due_date && (!submission || new Date(submission.created_at || submission.updated_at) > new Date(a.due_date))
+      
+      let status = 'not_submitted'
+      if (submission) {
+        status = isOnTime ? 'completed' : 'overdue'
+      }
+
+      return {
+        id: a.id,
+        title: a.title || '—',
+        lessonDate: null, // Можно добавить связь с уроком
+        dueDate: a.due_date,
+        status,
+        grade: submission?.grade || null,
+      }
+    })
+
+    return {
+      lessonsTotal: totalLessons,
+      completedLessons,
+      plannedLessons,
+      canceledLessons,
+      totalAssignments,
+      completedAssignments,
+      onTimeAssignments,
+      averageGrade,
+      lastActivityAt,
+      submissionsCount,
+      gradesTimeline,
+      lessonsList,
+      assignmentsList,
+    }
+  } catch (e) {
+    console.error('getStudentAnalyticsByPeriod error', e)
+    return empty
   }
 }

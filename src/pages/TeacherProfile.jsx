@@ -10,6 +10,7 @@ export default function TeacherProfile() {
   const userId = user?.id || session?.user?.id || null;
   const [form, setForm] = useState({ display_name: "", bio: "", specialization: "", avatar_url: null });
   const [email, setEmail] = useState("");
+  const [teacherId, setTeacherId] = useState(null); // ID записи в teachers
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -31,12 +32,15 @@ export default function TeacherProfile() {
           .eq("user_id", userId)
           .maybeSingle();
         if (fetchError) throw fetchError;
-        setForm({
-          display_name: data?.display_name || "",
-          bio: data?.bio || "",
-          specialization: data?.specialization || "",
-          avatar_url: data?.avatar_url || null,
-        });
+        if (data) {
+          setTeacherId(data.id); // Сохраняем ID записи для update
+          setForm({
+            display_name: data.display_name || "",
+            bio: data.bio || "",
+            specialization: data.specialization || "",
+            avatar_url: data.avatar_url || null,
+          });
+        }
         const uid = data?.user_id || userId
         if (uid) {
           const { data: uRow, error: uErr } = await supabase
@@ -62,7 +66,7 @@ export default function TeacherProfile() {
   const onSave = async () => {
     setSaving(true);
     setError(null);
-    if (!isSupabaseConfigured || !supabase || !userId) {
+    if (!isSupabaseConfigured || !supabase || !userId || !teacherId) {
       setSaving(false);
       return;
     }
@@ -75,7 +79,7 @@ export default function TeacherProfile() {
           specialization: form.specialization,
           avatar_url: form.avatar_url,
         })
-        .eq("user_id", userId);
+        .eq("id", teacherId);
       if (updateError) throw updateError;
       toast.success("Профиль сохранён");
       // Перезагружаем данные профиля
@@ -110,19 +114,6 @@ export default function TeacherProfile() {
 
     setUploadingAvatar(true);
     try {
-      // Создаём bucket если его нет
-      const { data: buckets } = await supabase.storage.listBuckets();
-      const hasAvatarsBucket = buckets?.some(b => b.name === 'avatars');
-      if (!hasAvatarsBucket) {
-        const { error: createErr } = await supabase.storage.createBucket('avatars', {
-          public: true,
-          fileSizeLimit: 5242880, // 5MB
-        });
-        if (createErr && !createErr.message.includes('already exists')) {
-          throw createErr;
-        }
-      }
-
       // Удаляем старое изображение если есть
       if (form.avatar_url) {
         try {
@@ -148,13 +139,20 @@ export default function TeacherProfile() {
 
       // Обновляем форму
       setForm(prev => ({ ...prev, avatar_url: filePath }));
-      toast.success('Аватар обновлён');
       
-      // Сохраняем сразу
-      await supabase
+      // Сохраняем через update по ID записи (не по user_id)
+      if (!teacherId) {
+        throw new Error('ID преподавателя не найден');
+      }
+      
+      const { error: updateError } = await supabase
         .from("teachers")
         .update({ avatar_url: filePath })
-        .eq("user_id", userId);
+        .eq("id", teacherId);
+      
+      if (updateError) throw updateError;
+      
+      toast.success('Аватар обновлён');
       
       // Перезагружаем данные профиля
       window.location.reload();

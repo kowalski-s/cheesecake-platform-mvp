@@ -289,19 +289,37 @@ const HOMEWORK_BUCKET = 'submissions'
       <section className="card">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Домашние задания</h2>
-          <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-full p-1 bg-orange-50/50 border border-orange-100/50 shadow-sm">
             <button
-              className={`rounded-lg px-2 py-1 ${tab === 'all' ? 'bg-brand text-white' : 'bg-white border'}`}
+              className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-orange-50/50 ${
+                tab === 'all' 
+                  ? 'bg-brand text-white shadow-sm' 
+                  : 'bg-transparent text-gray-700 hover:bg-orange-100/30'
+              }`}
               onClick={() => setTab('all')}
-            >Все</button>
+            >
+              Все
+            </button>
             <button
-              className={`rounded-lg px-2 py-1 ${tab === 'unfinished' ? 'bg-brand text-white' : 'bg-white border'}`}
+              className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-orange-50/50 ${
+                tab === 'unfinished' 
+                  ? 'bg-brand text-white shadow-sm' 
+                  : 'bg-transparent text-gray-700 hover:bg-orange-100/30'
+              }`}
               onClick={() => setTab('unfinished')}
-            >Невыполненные</button>
+            >
+              Невыполненные
+            </button>
             <button
-              className={`rounded-lg px-2 py-1 ${tab === 'reviewed' ? 'bg-brand text-white' : 'bg-white border'}`}
+              className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-orange-50/50 ${
+                tab === 'reviewed' 
+                  ? 'bg-brand text-white shadow-sm' 
+                  : 'bg-transparent text-gray-700 hover:bg-orange-100/30'
+              }`}
               onClick={() => setTab('reviewed')}
-            >Проверенные</button>
+            >
+              Проверенные
+            </button>
           </div>
         </div>
         <ul className="divide-y divide-gray-100">
