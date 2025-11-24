@@ -1,29 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
 import Loading from "../components/ui/Loading";
-import Section from "../components/ui/Section";
-import toast from "@/lib/safeToast";
-import { format } from "date-fns";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { getTeacherAnalytics, getTeacherStudentsStats } from "@/api/teacherAnalytics";
+import Avatar from "../components/ui/Avatar";
+import toast from "../lib/safeToast";
 
 export default function TeacherProfile() {
   const { session, role, user } = useAuth();
   const userId = user?.id || session?.user?.id || null;
-  const [form, setForm] = useState({ display_name: "", bio: "", specialization: "" });
+  const [form, setForm] = useState({ display_name: "", bio: "", specialization: "", avatar_url: null });
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState(null);
-  const [teacherId, setTeacherId] = useState(null);
-  const [analytics, setAnalytics] = useState(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsError, setAnalyticsError] = useState(null);
-  const initials = (() => {
-    const e = email || session?.user?.email || "";
-    return (e.split("@")[0]?.[0] || "?").toUpperCase();
-  })();
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     const load = async () => {
@@ -36,7 +27,7 @@ export default function TeacherProfile() {
       try {
         const { data, error: fetchError } = await supabase
           .from("teachers")
-          .select("id, user_id, display_name, bio, specialization")
+          .select("id, user_id, display_name, bio, specialization, avatar_url")
           .eq("user_id", userId)
           .maybeSingle();
         if (fetchError) throw fetchError;
@@ -44,8 +35,8 @@ export default function TeacherProfile() {
           display_name: data?.display_name || "",
           bio: data?.bio || "",
           specialization: data?.specialization || "",
+          avatar_url: data?.avatar_url || null,
         });
-        setTeacherId(data?.id || null);
         const uid = data?.user_id || userId
         if (uid) {
           const { data: uRow, error: uErr } = await supabase
@@ -82,9 +73,13 @@ export default function TeacherProfile() {
           display_name: form.display_name,
           bio: form.bio,
           specialization: form.specialization,
+          avatar_url: form.avatar_url,
         })
         .eq("user_id", userId);
       if (updateError) throw updateError;
+      toast.success("Профиль сохранён");
+      // Перезагружаем данные профиля
+      window.location.reload();
     } catch (e) {
       console.error(e);
       setError(e?.message || "Не удалось сохранить изменения");
@@ -93,355 +88,223 @@ export default function TeacherProfile() {
   }
 };
 
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Проверка типа файла
+    if (!file.type.startsWith('image/')) {
+      toast.error('Выберите изображение');
+      return;
+    }
+
+    // Проверка размера (макс 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Размер файла не должен превышать 5MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      // Создаём bucket если его нет
+      const { data: buckets } = await supabase.storage.listBuckets();
+      const hasAvatarsBucket = buckets?.some(b => b.name === 'avatars');
+      if (!hasAvatarsBucket) {
+        const { error: createErr } = await supabase.storage.createBucket('avatars', {
+          public: true,
+          fileSizeLimit: 5242880, // 5MB
+        });
+        if (createErr && !createErr.message.includes('already exists')) {
+          throw createErr;
+        }
+      }
+
+      // Удаляем старое изображение если есть
+      if (form.avatar_url) {
+        try {
+          await supabase.storage.from('avatars').remove([form.avatar_url]);
+        } catch (err) {
+          console.warn('Не удалось удалить старое изображение', err);
+        }
+      }
+
+      // Загружаем новое изображение
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${userId}/${timestamp}-${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Обновляем форму
+      setForm(prev => ({ ...prev, avatar_url: filePath }));
+      toast.success('Аватар обновлён');
+      
+      // Сохраняем сразу
+      await supabase
+        .from("teachers")
+        .update({ avatar_url: filePath })
+        .eq("user_id", userId);
+      
+      // Перезагружаем данные профиля
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      toast.error(e?.message || 'Не удалось загрузить аватар');
+    } finally {
+      setUploadingAvatar(false);
+      // Сбрасываем input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
 
   return (
     <div className="space-y-6">
-      <div className="text-xs text-slate-500">role: {role} uid: {user?.id}</div>
-      <div className="flex items-center gap-4">
-        <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 font-semibold">
-          {initials}
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold">Профиль преподавателя</h1>
-          <p className="text-gray-500">Редактирование отображаемых данных</p>
-          <div className="mt-1 text-sm text-gray-600">Email: {email || '—'}</div>
-        </div>
+      {/* Блок "Профиль преподавателя" */}
+      <div className="card p-6">
+        {loading ? (
+          <div className="py-10 text-center text-gray-500">Загрузка…</div>
+        ) : (
+          <>
+            {/* Header профиля */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-gray-200">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={handleAvatarClick}
+                    disabled={uploadingAvatar}
+                    className="relative cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group"
+                    title="Нажмите, чтобы изменить аватар"
+                  >
+                    <Avatar 
+                      displayName={form.display_name} 
+                      email={email} 
+                      size="md" 
+                      avatarUrl={form.avatar_url}
+                    />
+                    <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        className="h-6 w-6 text-white" 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                  </button>
+                  {uploadingAvatar && (
+                    <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="hidden"
+                />
+                <div>
+                  <h1 className="text-2xl font-semibold text-gray-900">
+                    {form.display_name || 'Преподаватель'}
+                  </h1>
+                  <div className="mt-1 text-sm text-gray-600">{email || '—'}</div>
+                  {form.specialization && (
+                    <div className="mt-1 text-sm text-gray-500">{form.specialization}</div>
+                  )}
+                </div>
+              </div>
+              <button
+                className="rounded-xl bg-brand py-2.5 px-6 text-center font-medium text-white hover:bg-brand-muted focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 transition-colors"
+                onClick={() => {
+                  const formElement = document.getElementById('teacher-profile-form')
+                  formElement?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
+              >
+                Редактировать профиль
+              </button>
+            </div>
+
+            {/* Форма редактирования */}
+            <div id="teacher-profile-form" className="mt-6 space-y-4">
+              {error && (
+                <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-600">
+                  {error}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Имя</label>
+                  <input
+                    className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0 transition-colors"
+                    type="text"
+                    value={form.display_name}
+                    onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
+                    placeholder="Введите имя"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Специализация</label>
+                  <input
+                    className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0 transition-colors"
+                    type="text"
+                    value={form.specialization}
+                    onChange={(e) => setForm((f) => ({ ...f, specialization: e.target.value }))}
+                    placeholder="Например: Китайский язык"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">О себе</label>
+                <textarea
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0 transition-colors resize-none"
+                  rows={6}
+                  value={form.bio}
+                  onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
+                  placeholder="Расскажите о себе, опыте и подходе к обучению..."
+                />
+              </div>
+              
+              <div className="flex gap-3 pt-2">
+                <button
+                  className="rounded-xl bg-brand py-2.5 px-6 text-center font-medium text-white hover:bg-brand-muted focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={onSave}
+                  disabled={saving}
+                >
+                  {saving ? "Сохраняем..." : "Сохранить"}
+                </button>
+                <button
+                  className="rounded-xl border border-gray-300 py-2.5 px-6 text-center font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => window.location.reload()}
+                  disabled={saving}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
-
-      {loading ? (
-        <div className="py-10 text-center">Загрузка…</div>
-      ) : (
-        <div className="space-y-4">
-          {error && (
-            <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</div>
-          )}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Имя</label>
-            <input
-              className="w-full rounded-xl border border-gray-300 px-4 py-2 text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-              type="text"
-              value={form.display_name}
-              onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Специализация</label>
-            <input
-              className="w-full rounded-xl border border-gray-300 px-4 py-2 text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-              type="text"
-              value={form.specialization}
-              onChange={(e) => setForm((f) => ({ ...f, specialization: e.target.value }))}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">О себе</label>
-            <textarea
-              className="w-full rounded-xl border border-gray-300 px-4 py-2 text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-              rows={4}
-              value={form.bio}
-              onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
-            />
-          </div>
-          <div className="flex gap-3">
-            <button
-              className="rounded-xl bg-brand py-2.5 px-4 text-center font-medium text-white hover:bg-brand-muted focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
-              onClick={onSave}
-              disabled={saving}
-            >
-              {saving ? "Сохраняем..." : "Сохранить"}
-            </button>
-            <button
-              className="rounded-xl border border-gray-300 py-2.5 px-4 text-center font-medium"
-              onClick={() => window.location.reload()}
-              disabled={saving}
-            >
-              Отмена
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ДЗ удалены из профиля — остаются только личные данные */}
-
-      {/* Аналитика преподавателя */}
-      <TeacherAnalyticsSection teacherId={teacherId} />
-
-      {/* Ученики и прогресс */}
-      <TeacherStudentsStatsSection teacherId={teacherId} />
     </div>
   );
-}
-
-// График оценок преподавателя с одноразовой анимацией на сессию
-function TeacherGradesTimelineChart({ data, domainMax }) {
-  useEffect(() => {
-    if (!window.__teacherAnalyticsAnimatedOnce) {
-      // Устанавливаем флаг, но не триггерим перерендер, чтобы анимация не прерывалась
-      window.__teacherAnalyticsAnimatedOnce = true;
-    }
-  }, []);
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="date" tickFormatter={(v) => format(new Date(v), 'dd.MM')} />
-        <YAxis domain={[0, domainMax]} tickCount={6} />
-        <Tooltip
-          formatter={(value, name, props) => [value, `${props?.payload?.title || '—'} — ${props?.payload?.student || '—'}`]}
-          labelFormatter={(label) => format(new Date(label), 'dd.MM.yyyy HH:mm')}
-        />
-        <Line
-          type="monotone"
-          dataKey="grade"
-          stroke="#ef4444"
-          strokeWidth={2}
-          dot={false}
-          activeDot={false}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          connectNulls
-          isAnimationActive={!window.__teacherAnalyticsAnimatedOnce}
-          animationDuration={1800}
-          animationEasing="ease-in-out"
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  )
-}
-
-// Таблица "Ученики и прогресс" с пагинацией
-function TeacherStudentsStatsSection({ teacherId }) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [items, setItems] = useState([])
-  const [total, setTotal] = useState(0)
-  const [limit, setLimit] = useState(20)
-  const [offset, setOffset] = useState(0)
-
-  useEffect(() => {
-    let mounted = true
-    async function loadStats() {
-      try {
-        setLoading(true)
-        setError(null)
-        if (!teacherId) {
-          setItems([])
-          setTotal(0)
-          return
-        }
-        const res = await getTeacherStudentsStats(teacherId, { limit, offset })
-        if (!mounted) return
-        setItems(Array.isArray(res?.items) ? res.items : [])
-        setTotal(Number(res?.total) || 0)
-      } catch (e) {
-        console.error('ERR_LOAD_TEACHER_STUDENTS_STATS', e, e?.stack)
-        setError(e)
-        if (toast && typeof toast.error === 'function') {
-          toast.error('Не удалось загрузить статистику по ученикам')
-        }
-      } finally {
-        if (mounted) setLoading(false)
-      }
-    }
-    loadStats()
-    return () => { mounted = false }
-  }, [teacherId, limit, offset])
-
-  const canPrev = offset > 0
-  const canNext = offset + limit < total
-
-  return (
-    <Section>
-      <h2 className="text-lg font-semibold mb-3">Ученики и прогресс</h2>
-
-      {loading ? (
-        <div className="card p-4">
-          <div className="space-y-2">
-            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
-            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
-            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
-            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
-            <div className="h-6 bg-gray-100 animate-pulse rounded"></div>
-          </div>
-        </div>
-      ) : error ? (
-        <div className="card p-4">
-          <div className="text-sm text-gray-500">Пока нет данных</div>
-        </div>
-      ) : total === 0 ? (
-        <div className="card p-4">
-          <div className="font-medium mb-1">Пока нет учеников</div>
-          <div className="text-sm text-gray-500">Как только появятся ученики, вы увидите их прогресс здесь</div>
-        </div>
-      ) : (
-        <div className="card p-4">
-          {/* Таблица для десктопа */}
-          <div className="hidden md:block overflow-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-gray-500">
-                  <th className="text-left py-2 pr-3">Имя ученика</th>
-            <th className="text-left py-2 pr-3">Кол-во уроков</th>
-                  <th className="text-left py-2 pr-3">Выполненные ДЗ</th>
-                  <th className="text-left py-2 pr-3">Средняя оценка</th>
-                  <th className="text-left py-2">Последняя активность</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {items.map(row => (
-                  <tr key={row.studentId}>
-                    <td className="py-2 pr-3 font-medium">{row.studentName || 'Без имени'}</td>
-                    <td className="py-2 pr-3">{row.lessonsWithTeacher ?? 0}</td>
-                    <td className="py-2 pr-3">{row.submittedAssignments ?? 0}</td>
-                    <td className="py-2 pr-3">{row.avgGrade != null ? row.avgGrade : '—'}</td>
-                    <td className="py-2">{row.lastActivityAt ? format(new Date(row.lastActivityAt), 'dd.MM.yyyy HH:mm') : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Список для мобильных */}
-          <div className="md:hidden divide-y divide-gray-100">
-            {items.map(row => (
-              <div key={row.studentId} className="py-3">
-                <div className="font-medium">{row.studentName || 'Без имени'}</div>
-                <div className="text-sm text-gray-600">Кол-во уроков: {row.lessonsWithTeacher ?? 0}</div>
-                <div className="text-sm text-gray-600">Выполненные ДЗ: {row.submittedAssignments ?? 0}</div>
-                <div className="text-sm text-gray-600">Средняя оценка: {row.avgGrade != null ? row.avgGrade : '—'}</div>
-                <div className="text-sm text-gray-600">Последняя активность: {row.lastActivityAt ? format(new Date(row.lastActivityAt), 'dd.MM.yyyy HH:mm') : '—'}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Пагинация */}
-          <div className="mt-4 flex items-center justify-between">
-            <button
-              className="rounded-xl border border-gray-300 py-2 px-3 text-sm disabled:opacity-50"
-              disabled={!canPrev}
-              onClick={() => setOffset(prev => Math.max(0, prev - limit))}
-            >Назад</button>
-            <div className="text-xs text-gray-500">Показано {Math.min(total, offset + 1)}–{Math.min(total, offset + limit)} из {total}</div>
-            <button
-              className="rounded-xl border border-gray-300 py-2 px-3 text-sm disabled:opacity-50"
-              disabled={!canNext}
-              onClick={() => setOffset(prev => prev + limit)}
-            >Вперёд</button>
-          </div>
-        </div>
-      )}
-    </Section>
-  )
-}
-
-function TeacherAnalyticsSection({ teacherId }) {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [data, setData] = useState(null)
-
-  useEffect(() => {
-    let mounted = true
-    async function loadAnalytics() {
-      try {
-        setLoading(true)
-        setError(null)
-        if (!teacherId) {
-          setData(null)
-          return
-        }
-        const a = await getTeacherAnalytics(teacherId)
-        if (mounted) setData(a)
-      } catch (e) {
-        console.error('ERR_LOAD_TEACHER_ANALYTICS', e, e?.stack)
-        setError(e)
-        if (toast && typeof toast.error === 'function') {
-          toast.error('Не удалось загрузить аналитику')
-        }
-      } finally {
-        if (mounted) setLoading(false)
-      }
-    }
-    loadAnalytics()
-    return () => { mounted = false }
-  }, [teacherId])
-
-  const totalLessons = data?.totalLessons ?? 0
-  const completedLessons = data?.completedLessons ?? 0
-  const progressPercent = totalLessons ? Math.round((completedLessons / totalLessons) * 100) : 0
-  const totalAssignmentsGiven = data?.totalAssignmentsGiven ?? 0
-  const checkedAssignments = data?.checkedAssignments ?? 0
-  const avgGrade = data?.averageGrade
-  const lastActivityAt = data?.lastActivityAt
-
-  return (
-    <Section>
-      <h2 className="text-lg font-semibold mb-3">Аналитика преподавателя</h2>
-
-      {loading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
-          <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
-          <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
-          <div className="card p-4 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div className="h-3 bg-gray-200 rounded w-full"></div></div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          {/* Уроки */}
-          <div className="card p-4">
-            <div className="text-sm text-gray-500 mb-1">Уроки</div>
-            <div className="font-semibold">Проведено {completedLessons} из {totalLessons}</div>
-            <div className="mt-2 h-2 w-full bg-gray-200 rounded-full overflow-hidden" aria-label="Прогресс расписания">
-              <div className="h-full bg-brand" style={{ width: `${progressPercent}%` }}></div>
-            </div>
-            <div className="text-xs text-gray-500 mt-1">{progressPercent}% расписания</div>
-          </div>
-
-          {/* Домашние задания */}
-          <div className="card p-4">
-            <div className="text-sm text-gray-500 mb-1">Домашние задания</div>
-            <div className="font-semibold">Проверено {checkedAssignments} из {totalAssignmentsGiven}</div>
-            <div className="text-xs text-gray-500 mt-1">Проверенные ДЗ</div>
-          </div>
-
-          {/* Средняя оценка */}
-          <div className="card p-4">
-            <div className="text-sm text-gray-500 mb-1">Средняя оценка</div>
-            <div className="font-semibold">{avgGrade != null ? avgGrade : '—'}</div>
-            {(Array.isArray(data?.gradesTimeline) && data.gradesTimeline.some(r => Number(r?.grade) > 10)) ? (
-              <div className="text-xs text-gray-500 mt-1">из 100</div>
-            ) : null}
-          </div>
-
-          {/* Последняя активность */}
-          <div className="card p-4">
-            <div className="text-sm text-gray-500 mb-1">Последняя активность</div>
-            <div className="font-semibold">{lastActivityAt ? format(new Date(lastActivityAt), 'dd.MM.yyyy HH:mm') : '—'}</div>
-          </div>
-        </div>
-      )}
-
-      {/* График оценок */}
-      <div className="mt-4">
-        {loading ? (
-          <div className="card p-4">
-            <div className="h-72 bg-gray-100 animate-pulse rounded"></div>
-          </div>
-        ) : (Array.isArray(data?.gradesTimeline) && data.gradesTimeline.length > 0 ? (
-          <div className="card p-4">
-            <div style={{ width: '100%', height: 280 }}>
-              <TeacherGradesTimelineChart
-                data={data.gradesTimeline}
-                domainMax={(Array.isArray(data?.gradesTimeline) && data.gradesTimeline.some(r => Number(r?.grade) > 10)) ? 100 : 10}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="card p-4">
-            <div className="text-sm text-gray-500">Пока нет данных</div>
-          </div>
-        ))}
-      </div>
-    </Section>
-  )
 }

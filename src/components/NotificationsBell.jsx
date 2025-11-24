@@ -113,53 +113,140 @@ export default function NotificationsBell() {
   return (
     <div className="relative" ref={ref}>
       <button
-        className="relative rounded-full p-2 text-gray-700 hover:bg-gray-100"
+        className={`relative rounded-full p-2 transition-all duration-200 cursor-pointer ${
+          unreadCount > 0 
+            ? 'text-orange-400 hover:bg-orange-50' 
+            : 'text-gray-400 hover:bg-gray-100'
+        }`}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen(v => !v)}
+        onClick={(e) => {
+          e.currentTarget.style.transform = 'scale(0.95)'
+          setTimeout(() => {
+            e.currentTarget.style.transform = 'scale(1)'
+          }, 150)
+          setOpen(v => !v)
+        }}
         title="Уведомления"
       >
-        {/* Bell icon */}
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 7 7.388 7 8.75V14.16c0 .538-.214 1.055-.595 1.435L5 17h5m5 0a3 3 0 11-6 0m6 0H9" />
+        {/* Bell icon - более тонкая */}
+        <svg 
+          xmlns="http://www.w3.org/2000/svg" 
+          className="h-5 w-5" 
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
+          strokeWidth={1.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
         </svg>
         {badgeText && (
-          <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center rounded-full bg-orange-600 text-white text-xs px-1.5 py-0.5 min-w-[1.25rem]">{badgeText}</span>
+          <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center rounded-full bg-orange-500 text-white text-[11px] font-semibold px-1.5 py-0.5 min-w-[18px] h-[18px] shadow-sm">
+            {badgeText}
+          </span>
         )}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 rounded-xl border bg-white shadow-lg p-2 z-50">
-          <div className="px-2 py-1 flex items-center justify-between">
-            <div className="font-semibold">Уведомления</div>
-            <button className="text-xs text-gray-600 hover:text-gray-800" onClick={onMarkAll}>Отметить всё прочитанным</button>
-          </div>
-          <div className="px-2 py-1 flex items-center gap-2">
-            <button className={`rounded-lg px-2 py-1 text-sm ${filter === 'all' ? 'bg-brand text-white' : 'bg-white border'}`} onClick={() => setFilter('all')}>Все</button>
-            <button className={`rounded-lg px-2 py-1 text-sm ${filter === 'unread' ? 'bg-brand text-white' : 'bg-white border'}`} onClick={() => setFilter('unread')}>Непрочитанные</button>
-          </div>
-          <div className="mt-2 max-h-80 overflow-auto">
-            <ul className="divide-y divide-gray-100">
-              {filtered.map(n => (
-                <li key={n.id} className="py-2 px-2 cursor-pointer hover:bg-gray-50" onClick={() => onClickItem(n)}>
-                  <div className="flex items-start gap-2">
-                    <span className={`mt-1 h-2 w-2 rounded-full ${typeColor(n.type)}`} aria-hidden />
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-sm ${!n.is_read ? 'font-semibold' : 'font-medium'} text-gray-900`}>{n.title || '—'}</div>
-                      {(n.body || '').trim() ? (
-                        <div className="text-xs text-gray-600 mt-0.5 truncate">{n.body}</div>
-                      ) : null}
+        <div 
+          className="absolute right-0 mt-2 w-80 rounded-2xl border border-gray-200 bg-slate-50 shadow-lg z-50 overflow-hidden"
+          style={{
+            animation: 'fadeIn 0.15s ease-out forwards'
+          }}
+        >
+          <div className="px-4 py-3 space-y-3">
+            {/* Шапка попапа */}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold text-[15px] text-gray-900 mb-0.5">Уведомления</div>
+                <div className="text-[11px] text-gray-500">
+                  {unreadCount > 0 
+                    ? `Сегодня у вас ${unreadCount} ${unreadCount === 1 ? 'новое уведомление' : unreadCount < 5 ? 'новых уведомления' : 'новых уведомлений'}`
+                    : 'Новых уведомлений нет'
+                  }
+                </div>
+              </div>
+              <button 
+                className="text-[12px] text-gray-600 hover:text-gray-900 hover:underline transition-colors whitespace-nowrap" 
+                onClick={onMarkAll}
+              >
+                Отметить всё прочитанным
+              </button>
+            </div>
+
+            {/* Табы */}
+            <div className="flex items-center gap-2">
+              <button 
+                className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                  filter === 'all' 
+                    ? 'bg-orange-50 text-orange-500 border border-orange-200' 
+                    : 'bg-transparent text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`} 
+                onClick={() => setFilter('all')}
+              >
+                Все
+              </button>
+              <button 
+                className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                  filter === 'unread' 
+                    ? 'bg-orange-50 text-orange-500 border border-orange-200' 
+                    : 'bg-transparent text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`} 
+                onClick={() => setFilter('unread')}
+              >
+                Непрочитанные
+              </button>
+            </div>
+
+            {/* Список уведомлений */}
+            <div className="max-h-80 overflow-y-auto -mx-4 px-4">
+              {loading ? (
+                <div className="py-4 text-center text-sm text-gray-500">Загрузка...</div>
+              ) : filtered.length === 0 ? (
+                <div className="py-6 text-center text-sm text-gray-500">Нет уведомлений</div>
+              ) : (
+                <div className="space-y-1">
+                  {filtered.map(n => (
+                    <div 
+                      key={n.id} 
+                      className="flex justify-between items-start gap-3 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => onClickItem(n)}
+                    >
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        {/* Индикатор состояния */}
+                        {!n.is_read ? (
+                          <span className="mt-1.5 h-2 w-2 rounded-full bg-orange-400 flex-shrink-0" aria-hidden />
+                        ) : (
+                          <span className="mt-1.5 h-2 w-2 rounded-full bg-gray-300 flex-shrink-0" aria-hidden />
+                        )}
+                        
+                        {/* Текстовая часть */}
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-sm ${!n.is_read ? 'font-medium' : 'font-normal'} text-gray-900`}>
+                            {n.title || '—'}
+                          </div>
+                          {(n.body || '').trim() ? (
+                            <div className="text-xs text-gray-500 mt-0.5">{n.body}</div>
+                          ) : null}
+                        </div>
+                      </div>
+                      
+                      {/* Время */}
+                      <div className="text-[11px] text-gray-400 whitespace-nowrap flex-shrink-0">
+                        {formatShortDateTime(n.created_at)}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500 whitespace-nowrap">{formatShortDateTime(n.created_at)}</div>
-                  </div>
-                </li>
-              ))}
-              {filtered.length === 0 && (
-                <li className="py-3 text-center text-sm text-gray-500">Нет уведомлений</li>
+                  ))}
+                </div>
               )}
-            </ul>
-          </div>
-          <div className="px-2 py-2">
-            <button className="w-full rounded-lg px-3 py-2 text-sm bg-white border hover:bg-gray-50" onClick={() => { setOpen(false); navigate('/notifications') }}>Показать все</button>
+            </div>
+
+            {/* Кнопка "Посмотреть все уведомления" */}
+            <button 
+              className="w-full rounded-full border border-gray-200 py-2 px-4 text-sm text-gray-700 hover:bg-gray-50 transition-colors font-medium" 
+              onClick={() => { setOpen(false); navigate('/notifications') }}
+            >
+              Посмотреть все уведомления
+            </button>
           </div>
         </div>
       )}

@@ -1,6 +1,32 @@
 import { supabase } from '@/lib/supabaseClient'
 
-export async function getTeacherAnalytics(teacherId) {
+// Получить список уникальных классов/уровней для преподавателя
+export async function getTeacherClassNames(teacherId) {
+  try {
+    if (!teacherId || !supabase) return []
+    
+    const { data, error } = await supabase
+      .from('lessons')
+      .select('class_name')
+      .eq('teacher_id', teacherId)
+      .not('class_name', 'is', null)
+    
+    if (error) throw error
+    
+    const uniqueClasses = Array.from(new Set(
+      (Array.isArray(data) ? data : [])
+        .map(l => l.class_name)
+        .filter(Boolean)
+    )).sort()
+    
+    return uniqueClasses
+  } catch (e) {
+    console.error('getTeacherClassNames error', e)
+    return []
+  }
+}
+
+export async function getTeacherAnalytics(teacherId, { from = null, to = null, className = null } = {}) {
   const empty = {
     totalLessons: 0,
     completedLessons: 0,
@@ -11,6 +37,8 @@ export async function getTeacherAnalytics(teacherId) {
     averageGrade: null,
     lastActivityAt: null,
     gradesTimeline: [],
+    plannedLessons: 0,
+    canceledLessons: 0,
   }
 
   try {
@@ -18,42 +46,94 @@ export async function getTeacherAnalytics(teacherId) {
 
     const nowIso = new Date().toISOString()
 
-    // Lessons for teacher
-    const { data: lessons, error: lessonsErr } = await supabase
+    // Lessons for teacher with filters
+    let lessonsQuery = supabase
       .from('lessons')
-      .select('id, title, start_at, end_at')
+      .select('id, title, start_at, end_at, status, class_name')
       .eq('teacher_id', teacherId)
+    
+    if (from) {
+      lessonsQuery = lessonsQuery.gte('start_at', from)
+    }
+    if (to) {
+      lessonsQuery = lessonsQuery.lte('start_at', to)
+    }
+    if (className && className !== '') {
+      lessonsQuery = lessonsQuery.eq('class_name', className)
+    }
+    
+    const { data: lessons, error: lessonsErr } = await lessonsQuery
     if (lessonsErr) throw lessonsErr
 
-    const totalLessons = Array.isArray(lessons) ? lessons.length : 0
-    const completedLessons = (Array.isArray(lessons) ? lessons : []).filter(l => {
-      try { return new Date(l.start_at).toISOString() < nowIso } catch { return false }
-    }).length
-    const upcomingLessons = totalLessons - completedLessons
+    const lessonsArray = Array.isArray(lessons) ? lessons : []
+    const totalLessons = lessonsArray.length
+    
+    // Статусы уроков - считаем только по статусу, не по времени
+    const doneCount = lessonsArray.filter(l => l.status === 'done').length
+    const plannedLessons = lessonsArray.filter(l => l.status === 'planned').length
+    const canceledLessons = lessonsArray.filter(l => l.status === 'canceled').length
+    
+    // completedLessons для обратной совместимости (уроки со статусом done)
+    const completedLessons = doneCount
+    const upcomingLessons = plannedLessons // Запланированные считаются предстоящими
     const teacherLessonIds = (Array.isArray(lessons) ? lessons : []).map(l => l.id)
 
-    // Assignments by teacher across their lessons
+    // Assignments by teacher across their lessons (filtered by date if needed)
     let assignments = []
     if (teacherLessonIds.length > 0) {
-      const { data: assigns, error: assignsErr } = await supabase
+      let assignsQuery = supabase
         .from('assignments')
         .select('id, title, created_at, lesson_id')
         .in('lesson_id', teacherLessonIds)
+      
+      if (from) {
+        assignsQuery = assignsQuery.gte('created_at', from)
+      }
+      if (to) {
+        assignsQuery = assignsQuery.lte('created_at', to)
+      }
+      
+      const { data: assigns, error: assignsErr } = await assignsQuery
       if (assignsErr) throw assignsErr
       assignments = Array.isArray(assigns) ? assigns : []
     }
     const assignmentIds = assignments.map(a => a.id)
     const totalAssignmentsGiven = assignmentIds.length
 
-    // Submissions for those assignments
+    // Submissions for those assignments (filtered by date if needed)
     let submissions = []
     if (assignmentIds.length > 0) {
-      const { data: subs, error: subsErr } = await supabase
+      let subsQuery = supabase
         .from('submissions')
         .select('id, assignment_id, student_id, grade, feedback, created_at, updated_at, student:students(display_name), assignment:assignments(title)')
         .in('assignment_id', assignmentIds)
+      
+      // Фильтрация по дате: используем updated_at, если есть, иначе created_at
+      // Supabase не поддерживает сложные OR условия напрямую, поэтому фильтруем после получения
+      // Но для производительности лучше фильтровать по updated_at, а created_at обработаем в коде
+      if (from) {
+        subsQuery = subsQuery.gte('updated_at', from)
+      }
+      if (to) {
+        subsQuery = subsQuery.lt('updated_at', to)
+      }
+      
+      const { data: subs, error: subsErr } = await subsQuery
       if (subsErr) throw subsErr
-      submissions = Array.isArray(subs) ? subs : []
+      let filteredSubs = Array.isArray(subs) ? subs : []
+      
+      // Дополнительная фильтрация по created_at для записей без updated_at
+      if (from || to) {
+        filteredSubs = filteredSubs.filter(s => {
+          const dateToCheck = s.updated_at || s.created_at
+          if (!dateToCheck) return false
+          const date = new Date(dateToCheck).toISOString()
+          if (from && date < from) return false
+          if (to && date >= to) return false
+          return true
+        })
+      }
+      submissions = filteredSubs
     }
 
     const checkedSubs = submissions.filter(s => s?.grade != null && String(s.grade).trim() !== '')
@@ -107,6 +187,8 @@ export async function getTeacherAnalytics(teacherId) {
       totalLessons,
       completedLessons,
       upcomingLessons,
+      plannedLessons,
+      canceledLessons,
       averageAttendance: null,
       totalAssignmentsGiven,
       checkedAssignments,
@@ -122,18 +204,30 @@ export async function getTeacherAnalytics(teacherId) {
 
 // Статистика по ученикам конкретного преподавателя с пагинацией
 // Возвращает { items: [{ studentId, studentName, lessonsWithTeacher, submittedAssignments, avgGrade, lastActivityAt }], total }
-export async function getTeacherStudentsStats(teacherId, { limit = 20, offset = 0 } = {}) {
+export async function getTeacherStudentsStats(teacherId, { limit = 20, offset = 0, from = null, to = null, className = null } = {}) {
   const empty = { items: [], total: 0 }
   try {
     if (!teacherId || !supabase) return empty
 
     const nowIso = new Date().toISOString()
 
-    // Все уроки преподавателя (нужны student_id и id)
-    const { data: lessons, error: lessonsErr } = await supabase
+    // Все уроки преподавателя (нужны student_id и id) с фильтрами
+    let lessonsQuery = supabase
       .from('lessons')
-      .select('id, student_id, start_at')
+      .select('id, student_id, start_at, class_name')
       .eq('teacher_id', teacherId)
+    
+    if (from) {
+      lessonsQuery = lessonsQuery.gte('start_at', from)
+    }
+    if (to) {
+      lessonsQuery = lessonsQuery.lte('start_at', to)
+    }
+    if (className && className !== '') {
+      lessonsQuery = lessonsQuery.eq('class_name', className)
+    }
+    
+    const { data: lessons, error: lessonsErr } = await lessonsQuery
     if (lessonsErr) throw lessonsErr
 
     const lessonRows = Array.isArray(lessons) ? lessons : []
@@ -192,27 +286,59 @@ export async function getTeacherStudentsStats(teacherId, { limit = 20, offset = 
       return 'Без имени'
     }
 
-    // Задания преподавателя по его урокам
+    // Задания преподавателя по его урокам (с фильтрацией по дате)
     let assignmentIds = []
     if (teacherLessonIds.length > 0) {
-      const { data: assigns, error: assignsErr } = await supabase
+      let assignsQuery = supabase
         .from('assignments')
         .select('id, lesson_id')
         .in('lesson_id', teacherLessonIds)
+      
+      if (from) {
+        assignsQuery = assignsQuery.gte('created_at', from)
+      }
+      if (to) {
+        assignsQuery = assignsQuery.lte('created_at', to)
+      }
+      
+      const { data: assigns, error: assignsErr } = await assignsQuery
       if (assignsErr) throw assignsErr
       assignmentIds = (Array.isArray(assigns) ? assigns : []).map(a => a.id)
     }
 
-    // Сабмишены по заданиям этого преподавателя для выбранных учеников
+    // Сабмишены по заданиям этого преподавателя для выбранных учеников (с фильтрацией по дате)
     let subsRows = []
     if (assignmentIds.length > 0 && pageStudentIds.length > 0) {
-      const { data: subs, error: subsErr } = await supabase
+      let subsQuery = supabase
         .from('submissions')
         .select('assignment_id, student_id, grade, created_at, updated_at')
         .in('assignment_id', assignmentIds)
         .in('student_id', pageStudentIds)
+      
+      // Фильтрация по дате: используем updated_at, если есть, иначе created_at
+      if (from) {
+        subsQuery = subsQuery.gte('updated_at', from)
+      }
+      if (to) {
+        subsQuery = subsQuery.lt('updated_at', to)
+      }
+      
+      const { data: subs, error: subsErr } = await subsQuery
       if (subsErr) throw subsErr
-      subsRows = Array.isArray(subs) ? subs : []
+      let filteredSubs = Array.isArray(subs) ? subs : []
+      
+      // Дополнительная фильтрация по created_at для записей без updated_at
+      if (from || to) {
+        filteredSubs = filteredSubs.filter(s => {
+          const dateToCheck = s.updated_at || s.created_at
+          if (!dateToCheck) return false
+          const date = new Date(dateToCheck).toISOString()
+          if (from && date < from) return false
+          if (to && date >= to) return false
+          return true
+        })
+      }
+      subsRows = filteredSubs
     }
 
     // Агрегация по каждому ученику
