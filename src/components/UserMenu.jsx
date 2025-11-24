@@ -85,7 +85,7 @@ export default function UserMenu() {
   const roleLabel = getRoleLabel(role)
 
   const profilePath = normalizedRole === "student" ? "/students/me" : normalizedRole === "teacher" ? "/teacher/profile" : normalizedRole === "admin" ? "/admin-profile" : "/"
-  const analyticsPath = normalizedRole === "teacher" || normalizedRole === "admin" ? "/teacher/analytics" : null
+  const analyticsPath = normalizedRole === "teacher" ? "/teacher/analytics" : null
   const statisticsPath = normalizedRole === "student" ? "/student/analytics" : null
 
   if (!user) {
