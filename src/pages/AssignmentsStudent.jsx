@@ -186,10 +186,22 @@ const HOMEWORK_BUCKET = 'submissions'
   // Определение статуса на основе встроенного в assignment submission
   const statusFor = (a) => {
     const s = a?.submission || null
+    const now = new Date()
+    const dueDate = a?.due_date ? new Date(a.due_date) : null
+    const isOverdue = dueDate && now > dueDate && !s
+    
+    if (isOverdue) {
+      return { label: 'просрочено', color: 'bg-red-50 text-red-700' }
+    }
+    
     if (!s) return { label: 'не сдано', color: 'bg-gray-50 text-gray-700' }
+    
     const hasGrade = s.grade !== null && s.grade !== undefined && String(s.grade).trim() !== ''
-    if (hasGrade) return { label: `проверено (оценка: ${s.grade})`, color: 'bg-green-50 text-green-700' }
-    return { label: 'ожидает проверки', color: 'bg-yellow-50 text-yellow-700' }
+    if (hasGrade) {
+      return { label: `проверено (оценка: ${s.grade})`, color: 'bg-green-50 text-green-700' }
+    }
+    
+    return { label: 'ожидает проверки', color: 'bg-orange-50 text-orange-700' }
   }
 
   // Фильтрация заданий по вкладке
@@ -322,41 +334,94 @@ const HOMEWORK_BUCKET = 'submissions'
             </button>
           </div>
         </div>
-        <ul className="divide-y divide-gray-100">
+        <div className="space-y-3 sm:space-y-4">
           {filteredAssignments.map(a => {
             const st = statusFor(a)
             const material = a?.material_id ? materialsMap[a.material_id] : null
+            const hasDescription = (a.description ?? '').trim()
+            const dueDate = a.due_date ? new Date(a.due_date) : null
+            const formattedDueDate = dueDate 
+              ? `${dueDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}, ${dueDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+              : 'без срока'
+            
             return (
-              <li key={a.id} className="py-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">{a.title ?? '—'}</div>
-                    <div className="text-sm text-gray-500">{(a.description ?? '').trim() ? a.description : '—'}</div>
-                    <div className="text-sm text-gray-500">Срок: {a.due_date ? new Date(a.due_date).toLocaleString() : 'без срока'}</div>
+              <div 
+                key={a.id} 
+                className="rounded-2xl bg-white shadow-sm border border-gray-100 p-4 sm:p-5 transition-all duration-150 hover:shadow-md hover:bg-orange-50/20"
+              >
+                {/* Верхняя строка: название, описание, статус */}
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1.5">{a.title ?? '—'}</h3>
+                    {hasDescription && (
+                      <p className="text-sm text-gray-500 line-clamp-2 mb-3">{a.description}</p>
+                    )}
+                    {/* Блок с дедлайном */}
+                    <div className="flex items-center gap-1.5 text-sm text-gray-600 group">
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        className="h-4 w-4 text-gray-400 group-hover:text-gray-600 transition-colors" 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="group-hover:text-gray-800 transition-colors">Срок: {formattedDueDate}</span>
+                    </div>
                   </div>
-                  <span className={`rounded-xl px-3 py-1 text-sm ${st.color}`}>{st.label}</span>
+                  {/* Статусная капсула */}
+                  <div className="flex-shrink-0 sm:self-start">
+                    <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium ${st.color}`}>
+                      {st.label}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
+                
+                {/* Блок действий */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 pt-2 border-t border-gray-100">
                   {material && (
-                    <button className="btn-outline" onClick={() => downloadMaterial(material)}>Скачать материал</button>
+                    <button 
+                      className="rounded-full border border-brand text-brand bg-white px-4 py-2 text-sm font-medium hover:bg-orange-50 transition-all duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+                      onClick={() => downloadMaterial(material)}
+                    >
+                      Скачать материал
+                    </button>
                   )}
                   {!a.submission && (
-                    <NavLink className="btn-outline" to={`/student/assignments/${a.id}`}>Отправить ДЗ</NavLink>
+                    <NavLink 
+                      className="rounded-full bg-brand text-white px-4 py-2 text-sm font-medium hover:bg-brand-muted hover:shadow-md transition-all duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 text-center"
+                      to={`/student/assignments/${a.id}`}
+                    >
+                      Отправить работу
+                    </NavLink>
                   )}
                   {a.submission && (a.submission.grade == null || String(a.submission.grade).trim() === '') && (
-                    <NavLink className="btn-outline" to={`/student/assignments/${a.id}`}>Редактировать отправку</NavLink>
+                    <NavLink 
+                      className="rounded-full bg-brand text-white px-4 py-2 text-sm font-medium hover:bg-brand-muted hover:shadow-md transition-all duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 text-center"
+                      to={`/student/assignments/${a.id}`}
+                    >
+                      Редактировать отправку
+                    </NavLink>
                   )}
                   {a.submission && a.submission.grade != null && String(a.submission.grade).trim() !== '' && (
-                    <NavLink className="btn-outline" to={`/student/assignments/${a.id}`}>Посмотреть комментарий преподавателя</NavLink>
+                    <NavLink 
+                      className="rounded-full bg-brand text-white px-4 py-2 text-sm font-medium hover:bg-brand-muted hover:shadow-md transition-all duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 text-center"
+                      to={`/student/assignments/${a.id}`}
+                    >
+                      Посмотреть комментарий преподавателя
+                    </NavLink>
                   )}
                 </div>
-              </li>
+              </div>
             )
           })}
-          {assignments.length === 0 && (
-            <li className="py-8 text-center text-gray-500">Пока заданий нет</li>
+          {filteredAssignments.length === 0 && (
+            <div className="rounded-2xl bg-white shadow-sm border border-gray-100 p-8 text-center text-gray-500">
+              Пока заданий нет
+            </div>
           )}
-        </ul>
+        </div>
       </section>
 
       {/* Редактор теперь вынесен на отдельную страницу */}
