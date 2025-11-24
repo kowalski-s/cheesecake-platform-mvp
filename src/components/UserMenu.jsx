@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import { supabase } from "../lib/supabaseClient"
 import Avatar from "./ui/Avatar"
+import { getUserMenuItems } from "../config/userMenuConfig"
 
 function getRoleLabel(role) {
   const normalized = role?.trim()?.toLowerCase() ?? null
@@ -84,9 +85,10 @@ export default function UserMenu() {
   const avatarUrl = userProfile?.avatar_url || profile?.avatar_url || null
   const roleLabel = getRoleLabel(role)
 
-  const profilePath = normalizedRole === "student" ? "/students/me" : normalizedRole === "teacher" ? "/teacher/profile" : normalizedRole === "admin" ? "/admin-profile" : "/"
-  const analyticsPath = normalizedRole === "teacher" ? "/teacher/analytics" : null
-  const statisticsPath = normalizedRole === "student" ? "/student/analytics" : null
+  // Получаем пункты меню из конфига
+  const menuItems = useMemo(() => {
+    return getUserMenuItems(role)
+  }, [role])
 
   if (!user) {
     return null
@@ -136,63 +138,43 @@ export default function UserMenu() {
 
             {/* Список пунктов меню */}
             <nav className="space-y-1">
-              <NavLink
-                className={({ isActive }) => `block w-full text-left rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                  isActive 
-                    ? "bg-orange-50 text-orange-600" 
-                    : "text-gray-700 hover:bg-gray-50"
-                }`}
-                to={profilePath}
-                onClick={() => setOpen(false)}
-              >
-                Профиль
-              </NavLink>
-              {analyticsPath && (
-                <NavLink
-                  className={({ isActive }) => `block w-full text-left rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                    isActive 
-                      ? "bg-orange-50 text-orange-600" 
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                  to={analyticsPath}
-                  onClick={() => setOpen(false)}
-                >
-                  Аналитика
-                </NavLink>
-              )}
-              {statisticsPath && (
-                <NavLink
-                  className={({ isActive }) => `block w-full text-left rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                    isActive 
-                      ? "bg-orange-50 text-orange-600" 
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                  to={statisticsPath}
-                  onClick={() => setOpen(false)}
-                >
-                  Статистика
-                </NavLink>
-              )}
-              <button 
-                className="block w-full text-left rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer" 
-                onClick={() => { 
-                  console.log("TODO: settings")
-                  setOpen(false)
-                }}
-              >
-                Настройки
-              </button>
-              <NavLink
-                className={({ isActive }) => `block w-full text-left rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                  isActive 
-                    ? "bg-red-50 text-red-600" 
-                    : "text-red-600 hover:bg-red-50"
-                }`}
-                to="/logout"
-                onClick={() => setOpen(false)}
-              >
-                Выйти
-              </NavLink>
+              {menuItems.map((item, index) => {
+                if (item.type === 'link') {
+                  const isLogout = item.isLogout === true
+                  return (
+                    <NavLink
+                      key={index}
+                      className={({ isActive }) => `block w-full text-left rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                        isActive 
+                          ? isLogout 
+                            ? "bg-red-50 text-red-600" 
+                            : "bg-orange-50 text-orange-600"
+                          : isLogout
+                            ? "text-red-600 hover:bg-red-50"
+                            : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                      to={item.path}
+                      onClick={() => setOpen(false)}
+                    >
+                      {item.label}
+                    </NavLink>
+                  )
+                } else if (item.type === 'button') {
+                  return (
+                    <button
+                      key={index}
+                      className="block w-full text-left rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        if (item.onClick) item.onClick()
+                        setOpen(false)
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  )
+                }
+                return null
+              })}
             </nav>
           </div>
         </div>

@@ -88,7 +88,7 @@ export default function TeacherAnalyticsPage() {
   return (
     <div className="space-y-6">
       <PageHeader 
-        title="Аналитика преподавателя"
+        title="Статистика преподавателя"
         description={teacherName ? `${teacherName} · ${periodDescription}` : "Загрузка..."}
       />
 
